@@ -46,7 +46,7 @@ jobs:
             test_fuse: true
 
     name: ${{ matrix.job_name }} Go ${{ matrix.go }}
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted #${{ matrix.os }}
 
     env:
       GOPROXY: https://proxy.golang.org
@@ -211,7 +211,7 @@ jobs:
     env:
       GOPROXY: https://proxy.golang.org
 
-    runs-on: ubuntu-latest
+    runs-on: self-hosted # ubuntu-latest
 
     name: Cross Compile for ${{ matrix.targets }}
 
@@ -239,7 +239,7 @@ jobs:
 
   lint:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: self-hosted # ubuntu-latest
     steps:
       - name: Set up Go ${{ env.latest_go }}
         uses: actions/setup-go@v3
@@ -271,7 +271,7 @@ jobs:
 
   docker:
     name: docker
-    runs-on: ubuntu-latest
+    runs-on: self-hosted # ubuntu-latest
     steps:
       - name: Check out code
         uses: actions/checkout@v3
