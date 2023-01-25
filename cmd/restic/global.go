@@ -25,6 +25,7 @@ import (
 	"github.com/restic/restic/internal/backend/retry"
 	"github.com/restic/restic/internal/backend/s3"
 	"github.com/restic/restic/internal/backend/sftp"
+	"github.com/restic/restic/internal/backend/smb"
 	"github.com/restic/restic/internal/backend/swift"
 	"github.com/restic/restic/internal/cache"
 	"github.com/restic/restic/internal/debug"
@@ -683,6 +684,78 @@ func parseConfig(loc location.Location, opts options.Options) (interface{}, erro
 
 		debug.Log("opening rest repository at %#v", cfg)
 		return cfg, nil
+	case "smb":
+		cfg := loc.Config.(smb.Config)
+		if err := opts.Apply(loc.Scheme, &cfg); err != nil {
+			return nil, err
+		}
+		if cfg.User == "" {
+			cfg.User = os.Getenv("RESTIC_SMB_USER")
+		}
+
+		if cfg.Password.String() == "" {
+			cfg.Password = options.NewSecretString(os.Getenv("RESTIC_SMB_PASSWORD"))
+		}
+
+		if cfg.Domain == "" {
+			cfg.Domain = os.Getenv("RESTIC_SMB_DOMAIN")
+		}
+		if cfg.Domain == "" {
+			cfg.Domain = smb.DefaultDomain
+		}
+
+		//0 is an acceptable value for timeout, hence using -1 as the default unset value.
+		if cfg.IdleTimeout == -1 {
+			it := os.Getenv("RESTIC_SMB_IDLETIMEOUTSECS")
+			if it == "" {
+				cfg.IdleTimeout = smb.DefaultIdleTimeout
+			} else {
+				t, err := strconv.Atoi(it)
+				if err != nil {
+					return nil, err
+				}
+				cfg.IdleTimeout = time.Duration(int64(t) * int64(time.Second))
+			}
+		}
+
+		if cfg.Connections == 0 {
+			c := os.Getenv("RESTIC_SMB_CONNECTIONS")
+			if c == "" {
+				cfg.Connections = smb.DefaultConnections
+			} else {
+				con, err := strconv.Atoi(c)
+				if err != nil {
+					return nil, err
+				}
+				cfg.Connections = uint(con)
+			}
+		}
+
+		if cfg.RequireMessageSigning == nil {
+			v := os.Getenv("RESTIC_SMB_REQUIRE_MESSAGESIGNING")
+			rms := strings.ToLower(v) == "true"
+			cfg.RequireMessageSigning = &rms
+		}
+
+		if cfg.ClientGuid == "" {
+			c := os.Getenv("RESTIC_SMB_CLIENTGUID")
+			cfg.ClientGuid = c
+		}
+
+		if cfg.Dialect == 0 {
+			d := os.Getenv("RESTIC_SMB_DIALECT")
+			if d != "" {
+				v, err := strconv.Atoi(d)
+				if err != nil {
+					return nil, err
+				}
+				cfg.Dialect = uint16(v)
+			}
+		}
+
+		debug.Log("opening smb repository at %#v", cfg)
+		return cfg, nil
+
 	}
 
 	return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -731,6 +804,8 @@ func open(ctx context.Context, s string, gopts GlobalOptions, opts options.Optio
 		be, err = rest.Open(cfg.(rest.Config), rt)
 	case "rclone":
 		be, err = rclone.Open(cfg.(rclone.Config), lim)
+	case "smb":
+		be, err = smb.Open(ctx, cfg.(smb.Config))
 
 	default:
 		return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
