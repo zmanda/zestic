@@ -1,6 +1,6 @@
 name: test
 on:
-  # run tests on push to master, but not when other branches are pushed to
+  # run tests on push to branch
   workflow_dispatch: {}
   push:
     branches:
