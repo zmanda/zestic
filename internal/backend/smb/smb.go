@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"sync"
 	"syscall"
@@ -224,8 +223,9 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 	}
 
 	// Ignore error if filesystem does not support fsync.
+	// In this case the sync call is on the smb client's file.
 	err = f.Sync()
-	syncNotSup := err != nil && (errors.Is(err, syscall.ENOTSUP) || isMacENOTTY(err))
+	syncNotSup := err != nil && (errors.Is(err, syscall.ENOTSUP))
 	if err != nil && !syncNotSup {
 		return errors.WithStack(err)
 	}
@@ -247,15 +247,6 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 	}
 
 	return nil
-}
-
-// The ExFAT driver on some versions of macOS can return ENOTTY,
-// "inappropriate ioctl for device", for fsync.
-//
-// https://github.com/restic/restic/issues/4016
-// https://github.com/realm/realm-core/issues/5789
-func isMacENOTTY(err error) bool {
-	return runtime.GOOS == "darwin" && errors.Is(err, syscall.ENOTTY)
 }
 
 // set file to readonly
