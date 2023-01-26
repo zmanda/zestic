@@ -83,6 +83,32 @@ jobs:
           chmod 755 $HOME/bin/rclone
           rm -rf rclone*
 
+          echo "install samba"
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            brew install samba
+          else
+            sudo apt-get install samba          
+          fi
+
+          echo "modifying samba config"
+          echo '[sambashare] ' | sudo tee -a /etc/samba/smb.conf
+          echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
+          echo '    path = ./SMBShare' | sudo tee -at@localhost ~]$ sudo vi /etc/samba/smb.conf
+          echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
+          echo '    browsable = yes' | sudo tee -a /etc/samba/smb.conf
+
+          systemctl restart smb.service
+          echo "samba service restarted"
+
+          sudo useradd smbuser
+          user=smbuser
+          pass=mGoWwqvgdnwtmh07
+          echo "$user:$pass" | sudo chpasswd
+          
+          (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
+          systemctl restart smb.service
+          echo "samba service restarted after adding user"
+
           # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
           echo $HOME/bin >> $GITHUB_PATH
         if: matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest'
