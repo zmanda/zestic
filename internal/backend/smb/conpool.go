@@ -75,9 +75,13 @@ func (b *Backend) dial(ctx context.Context, network, addr string) (*conn, error)
 		copy(clientId[:], []byte(b.ClientGuid))
 	}
 
+	rms := b.RequireMessageSigning != nil
+	if rms {
+		rms = *b.RequireMessageSigning
+	}
 	d := &smb2.Dialer{
 		Negotiator: smb2.Negotiator{
-			RequireMessageSigning: *b.RequireMessageSigning,
+			RequireMessageSigning: rms,
 			SpecifiedDialect:      b.Dialect,
 			ClientGuid:            clientId,
 		},
