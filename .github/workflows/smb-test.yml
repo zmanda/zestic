@@ -15,7 +15,6 @@ env:
 
 jobs:
   test:
-    environment: ResticTestEnvironment
     strategy:
       matrix:
         # list of jobs to run:
@@ -104,7 +103,7 @@ jobs:
           user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
           pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
           echo "$user"
-          sudo useradd "$user"
+          sudo id -u "$user" &>/dev/null || sudo useradd "$user"
           echo "$user:$pass" | sudo chpasswd
           
           (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
