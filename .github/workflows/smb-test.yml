@@ -100,10 +100,11 @@ jobs:
           sudo systemctl restart smbd.service
           echo "samba service restarted"
 
-          sudo useradd smbuser
           user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
           pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
-          echo "$user:$pass" | sudo chpasswd
+          echo $user
+          sudo useradd $user
+          echo $user:$pass | sudo chpasswd
           
           (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
           sudo systemctl restart smbd.service
