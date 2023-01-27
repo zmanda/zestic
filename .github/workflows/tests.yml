@@ -97,16 +97,16 @@ jobs:
           echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
           echo '    browsable = yes' | sudo tee -a /etc/samba/smb.conf
 
-          systemctl restart smb.service
+          sudo systemctl restart smb.service
           echo "samba service restarted"
 
           sudo useradd smbuser
-          user=smbuser
-          pass=mGoWwqvgdnwtmh07
+          user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
+          pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
           echo "$user:$pass" | sudo chpasswd
           
           (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
-          systemctl restart smb.service
+          sudo systemctl restart smb.service
           echo "samba service restarted after adding user"
 
           # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
@@ -170,6 +170,8 @@ jobs:
           RESTIC_TEST_S3_KEY: ${{ secrets.RESTIC_TEST_S3_KEY }}
           RESTIC_TEST_S3_SECRET: ${{ secrets.RESTIC_TEST_S3_SECRET }}
           RESTIC_TEST_S3_REPOSITORY: ${{ secrets.RESTIC_TEST_S3_REPOSITORY }}
+          RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
+          RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
           RESTIC_TEST_AZURE_ACCOUNT_NAME: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_NAME }}
           RESTIC_TEST_AZURE_ACCOUNT_KEY: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_KEY }}
           RESTIC_TEST_AZURE_REPOSITORY: ${{ secrets.RESTIC_TEST_AZURE_REPOSITORY }}
