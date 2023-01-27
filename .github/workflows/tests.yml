@@ -60,7 +60,6 @@ jobs:
 
       - name: Get programs (Linux/macOS)
         run: |
-          echo ${{ secrets.RESTIC_TEST_OS_PASSWORD  }} | sudo -S
           echo "build Go tools"
           go install github.com/restic/rest-server/cmd/rest-server@latest
 
