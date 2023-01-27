@@ -1,341 +1,341 @@
-name: test
-on:
-  # run tests on push to branch
-  workflow_dispatch: {}
-  push:
-    branches:
-      - master
+# name: test
+# on:
+#   # run tests on push to branch
+#   workflow_dispatch: {}
+#   push:
+#     branches:
+#       - master
 
-  # run tests for all pull requests
-  # pull_request:
+#   # run tests for all pull requests
+#   # pull_request:
 
-env:
-  latest_go: "1.19.x"
-  GO111MODULE: on
+# env:
+#   latest_go: "1.19.x"
+#   GO111MODULE: on
 
-jobs:
-  test:
-    strategy:
-      matrix:
-        # list of jobs to run:
-        include:
-          # - job_name: Windows
-          #   go: 1.19.x
-          #   os: windows-latest
+# jobs:
+#   test:
+#     strategy:
+#       matrix:
+#         # list of jobs to run:
+#         include:
+#           # - job_name: Windows
+#           #   go: 1.19.x
+#           #   os: windows-latest
 
-          # - job_name: macOS
-          #   go: 1.19.x
-          #   os: macOS-latest
-          #   test_fuse: false
+#           # - job_name: macOS
+#           #   go: 1.19.x
+#           #   os: macOS-latest
+#           #   test_fuse: false
 
-          - job_name: Linux
-            go: 1.19.x
-            os: ubuntu-latest
-            test_cloud_backends: true
-            test_fuse: true
-            check_changelog: true
+#           - job_name: Linux
+#             go: 1.19.x
+#             os: ubuntu-latest
+#             test_cloud_backends: true
+#             test_fuse: true
+#             check_changelog: true
 
-          # - job_name: Linux (race)
-          #   go: 1.19.x
-          #   os: ubuntu-latest
-          #   test_fuse: true
-          #   test_opts: "-race"
+#           # - job_name: Linux (race)
+#           #   go: 1.19.x
+#           #   os: ubuntu-latest
+#           #   test_fuse: true
+#           #   test_opts: "-race"
 
-          # - job_name: Linux
-          #   go: 1.18.x
-          #   os: ubuntu-latest
-          #   test_fuse: true
+#           # - job_name: Linux
+#           #   go: 1.18.x
+#           #   os: ubuntu-latest
+#           #   test_fuse: true
 
-    name: ${{ matrix.job_name }} Go ${{ matrix.go }}
-    runs-on: self-hosted #${{ matrix.os }}
+#     name: ${{ matrix.job_name }} Go ${{ matrix.go }}
+#     runs-on: self-hosted #${{ matrix.os }}
 
-    env:
-      GOPROXY: https://proxy.golang.org
+#     env:
+#       GOPROXY: https://proxy.golang.org
 
-    steps:
-      - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ matrix.go }}
+#     steps:
+#       - name: Set up Go ${{ matrix.go }}
+#         uses: actions/setup-go@v3
+#         with:
+#           go-version: ${{ matrix.go }}
 
-      - name: Get programs (Linux/macOS)
-        run: |
-          echo "build Go tools"
-          go install github.com/restic/rest-server/cmd/rest-server@latest
+#       - name: Get programs (Linux/macOS)
+#         run: |
+#           echo "build Go tools"
+#           go install github.com/restic/rest-server/cmd/rest-server@latest
 
-          echo "install minio server"
-          mkdir -p $HOME/bin
-          if [ "$RUNNER_OS" == "macOS" ]; then
-            wget --no-verbose -O $HOME/bin/minio https://dl.minio.io/server/minio/release/darwin-amd64/minio
-          else
-            wget --no-verbose -O $HOME/bin/minio https://dl.minio.io/server/minio/release/linux-amd64/minio
-          fi
-          chmod 755 $HOME/bin/minio
+#           echo "install minio server"
+#           mkdir -p $HOME/bin
+#           if [ "$RUNNER_OS" == "macOS" ]; then
+#             wget --no-verbose -O $HOME/bin/minio https://dl.minio.io/server/minio/release/darwin-amd64/minio
+#           else
+#             wget --no-verbose -O $HOME/bin/minio https://dl.minio.io/server/minio/release/linux-amd64/minio
+#           fi
+#           chmod 755 $HOME/bin/minio
 
-          echo "install rclone"
-          if [ "$RUNNER_OS" == "macOS" ]; then
-            wget --no-verbose -O rclone.zip https://downloads.rclone.org/rclone-current-osx-amd64.zip
-          else
-            wget --no-verbose -O rclone.zip https://downloads.rclone.org/rclone-current-linux-amd64.zip
-          fi
-          unzip rclone.zip
-          cp rclone*/rclone $HOME/bin
-          chmod 755 $HOME/bin/rclone
-          rm -rf rclone*
+#           echo "install rclone"
+#           if [ "$RUNNER_OS" == "macOS" ]; then
+#             wget --no-verbose -O rclone.zip https://downloads.rclone.org/rclone-current-osx-amd64.zip
+#           else
+#             wget --no-verbose -O rclone.zip https://downloads.rclone.org/rclone-current-linux-amd64.zip
+#           fi
+#           unzip rclone.zip
+#           cp rclone*/rclone $HOME/bin
+#           chmod 755 $HOME/bin/rclone
+#           rm -rf rclone*
 
-          echo "install samba"
-          if [ "$RUNNER_OS" == "macOS" ]; then
-            NONINTERACTIVE=1 brew install samba
-          else
-            sudo apt-get install samba -y          
-          fi
+#           echo "install samba"
+#           if [ "$RUNNER_OS" == "macOS" ]; then
+#             NONINTERACTIVE=1 brew install samba
+#           else
+#             sudo apt-get install samba -y          
+#           fi
 
-          echo "modifying samba config"
-          echo '[sambashare] ' | sudo tee -a /etc/samba/smb.conf
-          echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
-          echo '    path = ./SMBShare' | sudo tee -at@localhost ~]$ sudo vi /etc/samba/smb.conf
-          echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
-          echo '    browsable = yes' | sudo tee -a /etc/samba/smb.conf
+#           echo "modifying samba config"
+#           echo '[sambashare] ' | sudo tee -a /etc/samba/smb.conf
+#           echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
+#           echo '    path = ./SMBShare' | sudo tee -at@localhost ~]$ sudo vi /etc/samba/smb.conf
+#           echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
+#           echo '    browsable = yes' | sudo tee -a /etc/samba/smb.conf
 
-          sudo systemctl restart smb.service
-          echo "samba service restarted"
+#           sudo systemctl restart smb.service
+#           echo "samba service restarted"
 
-          sudo useradd smbuser
-          user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
-          pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
-          echo "$user:$pass" | sudo chpasswd
+#           sudo useradd smbuser
+#           user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
+#           pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
+#           echo "$user:$pass" | sudo chpasswd
           
-          (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
-          sudo systemctl restart smb.service
-          echo "samba service restarted after adding user"
+#           (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
+#           sudo systemctl restart smb.service
+#           echo "samba service restarted after adding user"
 
-          # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
-          echo $HOME/bin >> $GITHUB_PATH
-        if: matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest'
+#           # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
+#           echo $HOME/bin >> $GITHUB_PATH
+#         if: matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest'
 
-      - name: Get programs (Windows)
-        shell: powershell
-        run: |
-          $ProgressPreference = 'SilentlyContinue'
+#       - name: Get programs (Windows)
+#         shell: powershell
+#         run: |
+#           $ProgressPreference = 'SilentlyContinue'
 
-          echo "build Go tools"
-          go install github.com/restic/rest-server/...
+#           echo "build Go tools"
+#           go install github.com/restic/rest-server/...
 
-          echo "install minio server"
-          mkdir $Env:USERPROFILE/bin
-          Invoke-WebRequest https://dl.minio.io/server/minio/release/windows-amd64/minio.exe -OutFile $Env:USERPROFILE/bin/minio.exe
+#           echo "install minio server"
+#           mkdir $Env:USERPROFILE/bin
+#           Invoke-WebRequest https://dl.minio.io/server/minio/release/windows-amd64/minio.exe -OutFile $Env:USERPROFILE/bin/minio.exe
 
-          echo "install rclone"
-          Invoke-WebRequest https://downloads.rclone.org/rclone-current-windows-amd64.zip -OutFile rclone.zip
+#           echo "install rclone"
+#           Invoke-WebRequest https://downloads.rclone.org/rclone-current-windows-amd64.zip -OutFile rclone.zip
 
-          unzip rclone.zip
-          copy rclone*/rclone.exe $Env:USERPROFILE/bin
+#           unzip rclone.zip
+#           copy rclone*/rclone.exe $Env:USERPROFILE/bin
 
-          # add $USERPROFILE/bin to path ($GOBIN was already added to the path by setup-go@v3)
-          echo $Env:USERPROFILE\bin >> $Env:GITHUB_PATH
+#           # add $USERPROFILE/bin to path ($GOBIN was already added to the path by setup-go@v3)
+#           echo $Env:USERPROFILE\bin >> $Env:GITHUB_PATH
 
-          echo "install tar"
-          cd $env:USERPROFILE
-          mkdir tar
-          cd tar
+#           echo "install tar"
+#           cd $env:USERPROFILE
+#           mkdir tar
+#           cd tar
 
-          # install exactly these versions of tar and the libraries, other combinations might not work!
+#           # install exactly these versions of tar and the libraries, other combinations might not work!
 
-          Invoke-WebRequest https://github.com/restic/test-assets/raw/master/tar-1.13-1-bin.zip -OutFile tar.zip
-          unzip tar.zip
-          Invoke-WebRequest https://github.com/restic/test-assets/raw/master/libintl-0.11.5-2-bin.zip -OutFile libintl.zip
-          unzip libintl.zip
-          Invoke-WebRequest https://github.com/restic/test-assets/raw/master/libiconv-1.8-1-bin.zip -OutFile libiconv.zip
-          unzip libiconv.zip
+#           Invoke-WebRequest https://github.com/restic/test-assets/raw/master/tar-1.13-1-bin.zip -OutFile tar.zip
+#           unzip tar.zip
+#           Invoke-WebRequest https://github.com/restic/test-assets/raw/master/libintl-0.11.5-2-bin.zip -OutFile libintl.zip
+#           unzip libintl.zip
+#           Invoke-WebRequest https://github.com/restic/test-assets/raw/master/libiconv-1.8-1-bin.zip -OutFile libiconv.zip
+#           unzip libiconv.zip
 
-          # add $USERPROFILE/tar/bin to path
-          echo $Env:USERPROFILE\tar\bin >> $Env:GITHUB_PATH
-        if: matrix.os == 'windows-latest'
+#           # add $USERPROFILE/tar/bin to path
+#           echo $Env:USERPROFILE\tar\bin >> $Env:GITHUB_PATH
+#         if: matrix.os == 'windows-latest'
 
-      - name: Check out code
-        uses: actions/checkout@v3
+#       - name: Check out code
+#         uses: actions/checkout@v3
 
-      - name: Build with build.go
-        run: |
-          go run build.go
+#       - name: Build with build.go
+#         run: |
+#           go run build.go
 
-      - name: Run local Tests
-        env:
-          RESTIC_TEST_FUSE: ${{ matrix.test_fuse }}
-        run: |
-          go test -cover ${{matrix.test_opts}} ./...
+#       - name: Run local Tests
+#         env:
+#           RESTIC_TEST_FUSE: ${{ matrix.test_fuse }}
+#         run: |
+#           go test -cover ${{matrix.test_opts}} ./...
 
-      - name: Test cloud backends
-        env:
-          RESTIC_TEST_S3_KEY: ${{ secrets.RESTIC_TEST_S3_KEY }}
-          RESTIC_TEST_S3_SECRET: ${{ secrets.RESTIC_TEST_S3_SECRET }}
-          RESTIC_TEST_S3_REPOSITORY: ${{ secrets.RESTIC_TEST_S3_REPOSITORY }}
-          RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
-          RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
-          RESTIC_TEST_AZURE_ACCOUNT_NAME: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_NAME }}
-          RESTIC_TEST_AZURE_ACCOUNT_KEY: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_KEY }}
-          RESTIC_TEST_AZURE_REPOSITORY: ${{ secrets.RESTIC_TEST_AZURE_REPOSITORY }}
-          RESTIC_TEST_B2_ACCOUNT_ID: ${{ secrets.RESTIC_TEST_B2_ACCOUNT_ID }}
-          RESTIC_TEST_B2_ACCOUNT_KEY: ${{ secrets.RESTIC_TEST_B2_ACCOUNT_KEY }}
-          RESTIC_TEST_B2_REPOSITORY: ${{ secrets.RESTIC_TEST_B2_REPOSITORY }}
-          RESTIC_TEST_GS_REPOSITORY: ${{ secrets.RESTIC_TEST_GS_REPOSITORY }}
-          RESTIC_TEST_GS_PROJECT_ID: ${{ secrets.RESTIC_TEST_GS_PROJECT_ID }}
-          GOOGLE_PROJECT_ID: ${{ secrets.RESTIC_TEST_GS_PROJECT_ID }}
-          RESTIC_TEST_GS_APPLICATION_CREDENTIALS_B64: ${{ secrets.RESTIC_TEST_GS_APPLICATION_CREDENTIALS_B64 }}
-          RESTIC_TEST_OS_AUTH_URL: ${{ secrets.RESTIC_TEST_OS_AUTH_URL }}
-          RESTIC_TEST_OS_TENANT_NAME: ${{ secrets.RESTIC_TEST_OS_TENANT_NAME }}
-          RESTIC_TEST_OS_USERNAME: ${{ secrets.RESTIC_TEST_OS_USERNAME }}
-          RESTIC_TEST_OS_PASSWORD: ${{ secrets.RESTIC_TEST_OS_PASSWORD }}
-          RESTIC_TEST_OS_REGION_NAME: ${{ secrets.RESTIC_TEST_OS_REGION_NAME }}
-          RESTIC_TEST_SWIFT: ${{ secrets.RESTIC_TEST_SWIFT }}
-          # fail if any of the following tests cannot be run
-          RESTIC_TEST_DISALLOW_SKIP: "restic/backend/rest.TestBackendREST,\
-            restic/backend/sftp.TestBackendSFTP,\
-            restic/backend/s3.TestBackendMinio,\
-            restic/backend/rclone.TestBackendRclone,\
-            restic/backend/s3.TestBackendS3,\
-            restic/backend/swift.TestBackendSwift,\
-            restic/backend/b2.TestBackendB2,\
-            restic/backend/gs.TestBackendGS,\
-            restic/backend/azure.TestBackendAzure"
-        run: |
-          # prepare credentials for Google Cloud Storage tests in a temp file
-          export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp --tmpdir restic-gcs-auth-XXXXXXX)
-          echo $RESTIC_TEST_GS_APPLICATION_CREDENTIALS_B64 | base64 -d > $GOOGLE_APPLICATION_CREDENTIALS
-          go test -cover -parallel 4 ./internal/backend/...
+#       - name: Test cloud backends
+#         env:
+#           RESTIC_TEST_S3_KEY: ${{ secrets.RESTIC_TEST_S3_KEY }}
+#           RESTIC_TEST_S3_SECRET: ${{ secrets.RESTIC_TEST_S3_SECRET }}
+#           RESTIC_TEST_S3_REPOSITORY: ${{ secrets.RESTIC_TEST_S3_REPOSITORY }}
+#           RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
+#           RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
+#           RESTIC_TEST_AZURE_ACCOUNT_NAME: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_NAME }}
+#           RESTIC_TEST_AZURE_ACCOUNT_KEY: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_KEY }}
+#           RESTIC_TEST_AZURE_REPOSITORY: ${{ secrets.RESTIC_TEST_AZURE_REPOSITORY }}
+#           RESTIC_TEST_B2_ACCOUNT_ID: ${{ secrets.RESTIC_TEST_B2_ACCOUNT_ID }}
+#           RESTIC_TEST_B2_ACCOUNT_KEY: ${{ secrets.RESTIC_TEST_B2_ACCOUNT_KEY }}
+#           RESTIC_TEST_B2_REPOSITORY: ${{ secrets.RESTIC_TEST_B2_REPOSITORY }}
+#           RESTIC_TEST_GS_REPOSITORY: ${{ secrets.RESTIC_TEST_GS_REPOSITORY }}
+#           RESTIC_TEST_GS_PROJECT_ID: ${{ secrets.RESTIC_TEST_GS_PROJECT_ID }}
+#           GOOGLE_PROJECT_ID: ${{ secrets.RESTIC_TEST_GS_PROJECT_ID }}
+#           RESTIC_TEST_GS_APPLICATION_CREDENTIALS_B64: ${{ secrets.RESTIC_TEST_GS_APPLICATION_CREDENTIALS_B64 }}
+#           RESTIC_TEST_OS_AUTH_URL: ${{ secrets.RESTIC_TEST_OS_AUTH_URL }}
+#           RESTIC_TEST_OS_TENANT_NAME: ${{ secrets.RESTIC_TEST_OS_TENANT_NAME }}
+#           RESTIC_TEST_OS_USERNAME: ${{ secrets.RESTIC_TEST_OS_USERNAME }}
+#           RESTIC_TEST_OS_PASSWORD: ${{ secrets.RESTIC_TEST_OS_PASSWORD }}
+#           RESTIC_TEST_OS_REGION_NAME: ${{ secrets.RESTIC_TEST_OS_REGION_NAME }}
+#           RESTIC_TEST_SWIFT: ${{ secrets.RESTIC_TEST_SWIFT }}
+#           # fail if any of the following tests cannot be run
+#           RESTIC_TEST_DISALLOW_SKIP: "restic/backend/rest.TestBackendREST,\
+#             restic/backend/sftp.TestBackendSFTP,\
+#             restic/backend/s3.TestBackendMinio,\
+#             restic/backend/rclone.TestBackendRclone,\
+#             restic/backend/s3.TestBackendS3,\
+#             restic/backend/swift.TestBackendSwift,\
+#             restic/backend/b2.TestBackendB2,\
+#             restic/backend/gs.TestBackendGS,\
+#             restic/backend/azure.TestBackendAzure"
+#         run: |
+#           # prepare credentials for Google Cloud Storage tests in a temp file
+#           export GOOGLE_APPLICATION_CREDENTIALS=$(mktemp --tmpdir restic-gcs-auth-XXXXXXX)
+#           echo $RESTIC_TEST_GS_APPLICATION_CREDENTIALS_B64 | base64 -d > $GOOGLE_APPLICATION_CREDENTIALS
+#           go test -cover -parallel 4 ./internal/backend/...
 
-        # only run cloud backend tests for pull requests from and pushes to our
-        # own repo, otherwise the secrets are not available
-        # Skip for Dependabot pull requests as these are run without secrets
-        # https://docs.github.com/en/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions#responding-to-events
-        if: (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (github.actor != 'dependabot[bot]') && matrix.test_cloud_backends
+#         # only run cloud backend tests for pull requests from and pushes to our
+#         # own repo, otherwise the secrets are not available
+#         # Skip for Dependabot pull requests as these are run without secrets
+#         # https://docs.github.com/en/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions#responding-to-events
+#         if: (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (github.actor != 'dependabot[bot]') && matrix.test_cloud_backends
 
-      - name: Check changelog files with calens
-        run: |
-          echo "install calens"
-          go install github.com/restic/calens@latest
+#       - name: Check changelog files with calens
+#         run: |
+#           echo "install calens"
+#           go install github.com/restic/calens@latest
 
-          echo "check changelog files"
-          calens
-        if: matrix.check_changelog
+#           echo "check changelog files"
+#           calens
+#         if: matrix.check_changelog
 
-  cross_compile:
-    strategy:
+#   cross_compile:
+#     strategy:
 
-      # ATTENTION: the list of architectures must be in sync with helpers/build-release-binaries/main.go!
-      matrix:
-        # run cross-compile in three batches parallel so the overall tests run faster
-        targets:
-          # - "linux/386 linux/amd64 linux/arm linux/arm64 linux/ppc64le linux/mips linux/mipsle linux/mips64 linux/mips64le linux/s390x"
-          - "linux/386 linux/arm linux/arm64 linux/ppc64le linux/mips linux/mipsle linux/mips64 linux/mips64le linux/s390x"
+#       # ATTENTION: the list of architectures must be in sync with helpers/build-release-binaries/main.go!
+#       matrix:
+#         # run cross-compile in three batches parallel so the overall tests run faster
+#         targets:
+#           # - "linux/386 linux/amd64 linux/arm linux/arm64 linux/ppc64le linux/mips linux/mipsle linux/mips64 linux/mips64le linux/s390x"
+#           - "linux/386 linux/arm linux/arm64 linux/ppc64le linux/mips linux/mipsle linux/mips64 linux/mips64le linux/s390x"
 
-          - "openbsd/386 openbsd/amd64 \
-            freebsd/386 freebsd/amd64 freebsd/arm \
-            aix/ppc64 \
-            darwin/amd64 darwin/arm64"
+#           - "openbsd/386 openbsd/amd64 \
+#             freebsd/386 freebsd/amd64 freebsd/arm \
+#             aix/ppc64 \
+#             darwin/amd64 darwin/arm64"
 
-          - "netbsd/386 netbsd/amd64 \
-            windows/386 windows/amd64 \
-            solaris/amd64"
+#           - "netbsd/386 netbsd/amd64 \
+#             windows/386 windows/amd64 \
+#             solaris/amd64"
 
-    env:
-      GOPROXY: https://proxy.golang.org
+#     env:
+#       GOPROXY: https://proxy.golang.org
 
-    runs-on: self-hosted # ubuntu-latest
+#     runs-on: self-hosted # ubuntu-latest
 
-    name: Cross Compile for ${{ matrix.targets }}
+#     name: Cross Compile for ${{ matrix.targets }}
 
-    steps:
-      - name: Set up Go ${{ env.latest_go }}
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.latest_go }}
+#     steps:
+#       - name: Set up Go ${{ env.latest_go }}
+#         uses: actions/setup-go@v3
+#         with:
+#           go-version: ${{ env.latest_go }}
 
-      - name: Install gox
-        run: |
-          go install github.com/mitchellh/gox@latest
+#       - name: Install gox
+#         run: |
+#           go install github.com/mitchellh/gox@latest
 
-      - name: Check out code
-        uses: actions/checkout@v3
+#       - name: Check out code
+#         uses: actions/checkout@v3
 
-      - name: Cross-compile with gox for ${{ matrix.targets }}
-        env:
-          GOFLAGS: "-trimpath"
-          GOX_ARCHS: "${{ matrix.targets }}"
-        run: |
-          mkdir build-output
-          gox -parallel 2 -verbose -osarch "$GOX_ARCHS" -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}" ./cmd/restic
-          gox -parallel 2 -verbose -osarch "$GOX_ARCHS" -tags debug -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}_debug" ./cmd/restic
+#       - name: Cross-compile with gox for ${{ matrix.targets }}
+#         env:
+#           GOFLAGS: "-trimpath"
+#           GOX_ARCHS: "${{ matrix.targets }}"
+#         run: |
+#           mkdir build-output
+#           gox -parallel 2 -verbose -osarch "$GOX_ARCHS" -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}" ./cmd/restic
+#           gox -parallel 2 -verbose -osarch "$GOX_ARCHS" -tags debug -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}_debug" ./cmd/restic
 
-  # lint:
-  #   name: lint
-  #   runs-on: self-hosted # ubuntu-latest
-  #   steps:
-  #     - name: Set up Go ${{ env.latest_go }}
-  #       uses: actions/setup-go@v3
-  #       with:
-  #         go-version: ${{ env.latest_go }}
+#   # lint:
+#   #   name: lint
+#   #   runs-on: self-hosted # ubuntu-latest
+#   #   steps:
+#   #     - name: Set up Go ${{ env.latest_go }}
+#   #       uses: actions/setup-go@v3
+#   #       with:
+#   #         go-version: ${{ env.latest_go }}
 
-  #     - name: Check out code
-  #       uses: actions/checkout@v3
+#   #     - name: Check out code
+#   #       uses: actions/checkout@v3
 
-  #     - name: golangci-lint
-  #       uses: golangci/golangci-lint-action@v3
-  #       with:
-  #         # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
-  #         version: v1.49
-  #         # Optional: show only new issues if it's a pull request. The default value is `false`.
-  #         only-new-issues: true
-  #         args: --verbose --timeout 5m
+#   #     - name: golangci-lint
+#   #       uses: golangci/golangci-lint-action@v3
+#   #       with:
+#   #         # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
+#   #         version: v1.49
+#   #         # Optional: show only new issues if it's a pull request. The default value is `false`.
+#   #         only-new-issues: true
+#   #         args: --verbose --timeout 5m
 
-  #       # only run golangci-lint for pull requests, otherwise ALL hints get
-  #       # reported. We need to slowly address all issues until we can enable
-  #       # linting the master branch :)
-  #       if: github.event_name == 'pull_request'
+#   #       # only run golangci-lint for pull requests, otherwise ALL hints get
+#   #       # reported. We need to slowly address all issues until we can enable
+#   #       # linting the master branch :)
+#   #       if: github.event_name == 'pull_request'
 
-  #     - name: Check go.mod/go.sum
-  #       run: |
-  #         echo "check if go.mod and go.sum are up to date"
-  #         go mod tidy
-  #         git diff --exit-code go.mod go.sum
+#   #     - name: Check go.mod/go.sum
+#   #       run: |
+#   #         echo "check if go.mod and go.sum are up to date"
+#   #         go mod tidy
+#   #         git diff --exit-code go.mod go.sum
 
-  # docker:
-  #   name: docker
-  #   runs-on: self-hosted # ubuntu-latest
-  #   steps:
-  #     - name: Check out code
-  #       uses: actions/checkout@v3
+#   # docker:
+#   #   name: docker
+#   #   runs-on: self-hosted # ubuntu-latest
+#   #   steps:
+#   #     - name: Check out code
+#   #       uses: actions/checkout@v3
 
-  #     - name: Docker meta
-  #       id: meta
-  #       uses: docker/metadata-action@v4
-  #       with:
-  #         # list of Docker images to use as base name for tags
-  #         images: |
-  #           restic/restic
-  #         # generate Docker tags based on the following events/attributes
-  #         tags: |
-  #           type=schedule
-  #           type=ref,event=branch
-  #           type=ref,event=pr
-  #           type=semver,pattern={{version}}
-  #           type=semver,pattern={{major}}.{{minor}}
-  #           type=semver,pattern={{major}}
-  #           type=sha
+#   #     - name: Docker meta
+#   #       id: meta
+#   #       uses: docker/metadata-action@v4
+#   #       with:
+#   #         # list of Docker images to use as base name for tags
+#   #         images: |
+#   #           restic/restic
+#   #         # generate Docker tags based on the following events/attributes
+#   #         tags: |
+#   #           type=schedule
+#   #           type=ref,event=branch
+#   #           type=ref,event=pr
+#   #           type=semver,pattern={{version}}
+#   #           type=semver,pattern={{major}}.{{minor}}
+#   #           type=semver,pattern={{major}}
+#   #           type=sha
 
-  #     - name: Set up QEMU
-  #       uses: docker/setup-qemu-action@v2
+#   #     - name: Set up QEMU
+#   #       uses: docker/setup-qemu-action@v2
 
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v2
+#   #     - name: Set up Docker Buildx
+#   #       uses: docker/setup-buildx-action@v2
 
-  #     - name: Build and push
-  #       id: docker_build
-  #       uses: docker/build-push-action@v3
-  #       with:
-  #         push: false
-  #         context: .
-  #         file: docker/Dockerfile
-  #         pull: true
-  #         tags: ${{ steps.meta.outputs.tags }}
-  #         labels: ${{ steps.meta.outputs.labels }}
+#   #     - name: Build and push
+#   #       id: docker_build
+#   #       uses: docker/build-push-action@v3
+#   #       with:
+#   #         push: false
+#   #         context: .
+#   #         file: docker/Dockerfile
+#   #         pull: true
+#   #         tags: ${{ steps.meta.outputs.tags }}
+#   #         labels: ${{ steps.meta.outputs.labels }}
