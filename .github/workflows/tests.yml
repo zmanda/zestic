@@ -85,7 +85,7 @@ jobs:
 
           echo "install samba"
           if [ "$RUNNER_OS" == "macOS" ]; then
-            brew install samba
+            NONINTERACTIVE=1 brew install samba
           else
             sudo apt-get install samba -y          
           fi
