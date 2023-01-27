@@ -47,7 +47,7 @@ jobs:
           #   test_fuse: true
 
     name: ${{ matrix.job_name }} Go ${{ matrix.go }}
-    runs-on: self-hosted #${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
 
     env:
       GOPROXY: https://proxy.golang.org
