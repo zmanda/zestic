@@ -87,7 +87,7 @@ jobs:
           if [ "$RUNNER_OS" == "macOS" ]; then
             NONINTERACTIVE=1 brew install samba
           else
-            sudo apt-get install samba -y          
+            sudo apt-get install samba -y --fix-missing          
           fi
           
           echo "create samba share directory"
