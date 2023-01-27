@@ -30,9 +30,10 @@ func newTestSuite(t testing.TB) *test.Suite {
 			cfg.User = os.Getenv("RESTIC_TEST_SMB_USERNAME")
 			cfg.Password = options.NewSecretString(os.Getenv("RESTIC_TEST_SMB_PASSWORD"))
 			cfg.Connections = smb.DefaultConnections
-			cfg.IdleTimeout = smb.DefaultIdleTimeout
+			timeout := smb.DefaultIdleTimeout
+			cfg.IdleTimeout = &timeout
 			cfg.Domain = smb.DefaultDomain
-			t.Logf("create new backend at %v", cfg.Address+cfg.ShareName)
+			t.Logf("create new backend at %v", cfg.Address+"/"+cfg.ShareName)
 
 			return cfg, nil
 		},

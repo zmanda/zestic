@@ -13,13 +13,13 @@ var configTests = []struct {
 		Address:   "shareaddress",
 		Port:      DefaultSmbPort,
 		ShareName: "sharename",
-		Path:      "path",
+		Path:      "directory",
 	}},
 	{"smb://shareaddress:456/sharename/directory", Config{
 		Address:   "shareaddress",
 		Port:      456,
 		ShareName: "sharename",
-		Path:      "path",
+		Path:      "directory",
 	}},
 }
 

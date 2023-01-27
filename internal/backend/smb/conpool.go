@@ -189,8 +189,8 @@ func (b *Backend) putConnection(pc **conn) {
 
 	b.poolMu.Lock()
 	b.pool = append(b.pool, c)
-	if b.Config.IdleTimeout > 0 {
-		b.drain.Reset(b.Config.IdleTimeout) // nudge on the pool emptying timer
+	if b.Config.IdleTimeout != nil && *b.Config.IdleTimeout > 0 {
+		b.drain.Reset(*b.Config.IdleTimeout) // nudge on the pool emptying timer
 	}
 	b.poolMu.Unlock()
 }
@@ -201,12 +201,12 @@ func (b *Backend) drainPool(ctx context.Context) (err error) {
 	defer b.poolMu.Unlock()
 	if sessions := b.getSessions(); sessions != 0 {
 		debug.Log("Not closing %d unused connections as %d sessions active", len(b.pool), sessions)
-		if b.Config.IdleTimeout > 0 {
-			b.drain.Reset(b.Config.IdleTimeout) // nudge on the pool emptying timer
+		if b.Config.IdleTimeout != nil && *b.Config.IdleTimeout > 0 {
+			b.drain.Reset(*b.Config.IdleTimeout) // nudge on the pool emptying timer
 		}
 		return nil
 	}
-	if b.Config.IdleTimeout > 0 {
+	if b.Config.IdleTimeout != nil && *b.Config.IdleTimeout > 0 {
 		b.drain.Stop()
 	}
 	if len(b.pool) != 0 {

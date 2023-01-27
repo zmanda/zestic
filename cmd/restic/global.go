@@ -705,16 +705,18 @@ func parseConfig(loc location.Location, opts options.Options) (interface{}, erro
 		}
 
 		//0 is an acceptable value for timeout, hence using -1 as the default unset value.
-		if cfg.IdleTimeout == -1 {
+		if cfg.IdleTimeout == nil {
 			it := os.Getenv("RESTIC_SMB_IDLETIMEOUTSECS")
 			if it == "" {
-				cfg.IdleTimeout = smb.DefaultIdleTimeout
+				timeout := smb.DefaultIdleTimeout
+				cfg.IdleTimeout = &timeout
 			} else {
 				t, err := strconv.Atoi(it)
 				if err != nil {
 					return nil, err
 				}
-				cfg.IdleTimeout = time.Duration(int64(t) * int64(time.Second))
+				timeout := (time.Duration(int64(t) * int64(time.Second)))
+				cfg.IdleTimeout = &timeout
 			}
 		}
 
