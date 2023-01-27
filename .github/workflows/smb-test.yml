@@ -97,7 +97,7 @@ jobs:
           echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
           echo '    browsable = yes' | sudo tee -a /etc/samba/smb.conf
 
-          sudo systemctl restart smb.service
+          sudo systemctl restart smbd.service
           echo "samba service restarted"
 
           sudo useradd smbuser
@@ -106,7 +106,7 @@ jobs:
           echo "$user:$pass" | sudo chpasswd
           
           (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
-          sudo systemctl restart smb.service
+          sudo systemctl restart smbd.service
           echo "samba service restarted after adding user"
 
           # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
