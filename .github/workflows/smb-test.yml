@@ -89,6 +89,9 @@ jobs:
           else
             sudo apt-get install samba -y          
           fi
+          
+          echo "create samba share directory"
+          mkdir ./SMBShare
 
           echo "modifying samba config"
           echo '[sambashare] ' | sudo tee -a /etc/samba/smb.conf
