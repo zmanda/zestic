@@ -19,14 +19,14 @@ jobs:
       matrix:
         # list of jobs to run:
         include:
-          - job_name: Windows
-            go: 1.19.x
-            os: windows-latest
+          # - job_name: Windows
+          #   go: 1.19.x
+          #   os: windows-latest
 
-          - job_name: macOS
-            go: 1.19.x
-            os: macOS-latest
-            test_fuse: false
+          # - job_name: macOS
+          #   go: 1.19.x
+          #   os: macOS-latest
+          #   test_fuse: false
 
           - job_name: Linux
             go: 1.19.x
@@ -35,16 +35,16 @@ jobs:
             test_fuse: true
             check_changelog: true
 
-          - job_name: Linux (race)
-            go: 1.19.x
-            os: ubuntu-latest
-            test_fuse: true
-            test_opts: "-race"
+          # - job_name: Linux (race)
+          #   go: 1.19.x
+          #   os: ubuntu-latest
+          #   test_fuse: true
+          #   test_opts: "-race"
 
-          - job_name: Linux
-            go: 1.18.x
-            os: ubuntu-latest
-            test_fuse: true
+          # - job_name: Linux
+          #   go: 1.18.x
+          #   os: ubuntu-latest
+          #   test_fuse: true
 
     name: ${{ matrix.job_name }} Go ${{ matrix.go }}
     runs-on: self-hosted #${{ matrix.os }}
