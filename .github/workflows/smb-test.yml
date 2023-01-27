@@ -85,15 +85,15 @@ jobs:
 
           echo "install samba"
           if [ "$RUNNER_OS" == "macOS" ]; then
-            brew install samba
+            NONINTERACTIVE=1 brew install samba
           else
-            sudo apt-get install samba -y     
+            sudo apt-get install samba -y          
           fi
 
           echo "modifying samba config"
           echo '[sambashare] ' | sudo tee -a /etc/samba/smb.conf
           echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
-          echo '    path = ./SMBShare' | sudo tee -at@localhost ~]$ sudo vi /etc/samba/smb.conf
+          echo '    path = ./SMBShare' | sudo tee -a /etc/samba/smb.conf
           echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
           echo '    browsable = yes' | sudo tee -a /etc/samba/smb.conf
 
