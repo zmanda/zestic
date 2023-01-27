@@ -102,9 +102,9 @@ jobs:
 
           user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
           pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
-          echo $user
-          sudo useradd $user
-          echo $user:$pass | sudo chpasswd
+          echo "$user"
+          sudo useradd "$user"
+          echo "$user:$pass" | sudo chpasswd
           
           (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
           sudo systemctl restart smbd.service
