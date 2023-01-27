@@ -64,7 +64,7 @@ jobs:
           go install github.com/restic/rest-server/cmd/rest-server@latest
 
           echo "install minio server"
-          mkdir $HOME/bin
+          mkdir -p $HOME/bin
           if [ "$RUNNER_OS" == "macOS" ]; then
             wget --no-verbose -O $HOME/bin/minio https://dl.minio.io/server/minio/release/darwin-amd64/minio
           else
