@@ -4,7 +4,7 @@ on:
   workflow_dispatch: {}
   push:
     branches:
-      - 'feature/smb-test-setup'
+      - master
 
   # run tests for all pull requests
   pull_request:
