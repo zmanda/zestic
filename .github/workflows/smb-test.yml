@@ -1,4 +1,4 @@
-name: test
+name: smb-test
 on:
   # run tests on push to branch
   workflow_dispatch: {}
