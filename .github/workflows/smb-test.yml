@@ -15,6 +15,7 @@ env:
 
 jobs:
   test:
+    environment: ResticTestEnvironment
     strategy:
       matrix:
         # list of jobs to run:
