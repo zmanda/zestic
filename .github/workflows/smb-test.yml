@@ -87,6 +87,7 @@ jobs:
           if [ "$RUNNER_OS" == "macOS" ]; then
             NONINTERACTIVE=1 brew install samba
           else
+            sudo apt-get update
             sudo apt-get install samba -y --fix-missing          
           fi
           
