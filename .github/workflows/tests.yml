@@ -106,6 +106,8 @@ jobs:
           echo '    force create mode = 0660' | sudo tee -a /etc/samba/smb.conf
           echo '    force directory mode = 2770' | sudo tee -a /etc/samba/smb.conf
           echo "    valid users = $user" | sudo tee -a /etc/samba/smb.conf
+          echo '    interfaces = 127.0.0.0/8 eth0' | sudo tee -a /etc/samba/smb.conf
+          echo '    bind interfaces only = yes' | sudo tee -a /etc/samba/smb.conf
 
           echo "restart services"
           sudo systemctl restart smbd
