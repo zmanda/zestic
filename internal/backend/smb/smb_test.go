@@ -26,9 +26,9 @@ func newTestSuite(t testing.TB) *test.Suite {
 
 			cfg := smb.NewConfig()
 			cfg.Address = "127.0.0.1"
-			cfg.User = os.Getenv("RESTIC_TEST_SMB_USERNAME")
+			cfg.User = "smbuser"
 			cfg.ShareName = cfg.User
-			cfg.Password = options.NewSecretString(os.Getenv("RESTIC_TEST_SMB_PASSWORD"))
+			cfg.Password = options.NewSecretString("smbpass")
 			cfg.Connections = smb.DefaultConnections
 			timeout := smb.DefaultIdleTimeout
 			cfg.IdleTimeout = &timeout
