@@ -97,11 +97,11 @@ jobs:
           echo "Allow Samba in firewall"
           sudo ufw allow 'Samba'
 
-          echo ''
           echo "modifying samba config"
+          echo '' | sudo tee -a /etc/samba/smb.conf
           echo '    interfaces = 127.0.0.0/8 eth0' | sudo tee -a /etc/samba/smb.conf
           echo '    bind interfaces only = yes' | sudo tee -a /etc/samba/smb.conf
-          echo ''
+          echo '' | sudo tee -a /etc/samba/smb.conf
           echo "[$user]" | sudo tee -a /etc/samba/smb.conf
           echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
           echo "    path = /samba/$user" | sudo tee -a /etc/samba/smb.conf
