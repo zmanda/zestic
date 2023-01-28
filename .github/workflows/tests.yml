@@ -1,5 +1,7 @@
 name: test
 on:
+  # run tests manually with workflow_dispatch
+  workflow_dispatch: {}
   # run tests on push to master, but not when other branches are pushed to
   push:
     branches:
