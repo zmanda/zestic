@@ -97,7 +97,11 @@ jobs:
           echo "Allow Samba in firewall"
           sudo ufw allow 'Samba'
 
+          echo ''
           echo "modifying samba config"
+          echo '    interfaces = 127.0.0.0/8 eth0' | sudo tee -a /etc/samba/smb.conf
+          echo '    bind interfaces only = yes' | sudo tee -a /etc/samba/smb.conf
+          echo ''
           echo "[$user]" | sudo tee -a /etc/samba/smb.conf
           echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
           echo "    path = /samba/$user" | sudo tee -a /etc/samba/smb.conf
@@ -106,9 +110,7 @@ jobs:
           echo '    force create mode = 0660' | sudo tee -a /etc/samba/smb.conf
           echo '    force directory mode = 2770' | sudo tee -a /etc/samba/smb.conf
           echo "    valid users = $user" | sudo tee -a /etc/samba/smb.conf
-          echo '    interfaces = 127.0.0.0/8 eth0' | sudo tee -a /etc/samba/smb.conf
-          echo '    bind interfaces only = yes' | sudo tee -a /etc/samba/smb.conf
-
+          
           echo "restart services"
           sudo systemctl restart smbd
           sudo systemctl restart nmbd
