@@ -133,11 +133,16 @@ jobs:
           (echo "$pass"; echo "$pass") | sudo smbpasswd -a "$user"
 
           echo "enable samba user"
-          (echo "$pass"; echo "$pass") | sudo smbpasswd -e "$user"
+          sudo smbpasswd -e "$user"
 
           echo "restart services"
           sudo systemctl restart smbd
           sudo systemctl restart nmbd
+
+          sudo apt-get install smbclient -y
+
+          smbclient //127.0.0.1/smbuser -U smbuser%smbpass
+          exit
          
           # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
           echo $HOME/bin >> $GITHUB_PATH
