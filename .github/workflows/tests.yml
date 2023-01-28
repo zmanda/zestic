@@ -119,7 +119,25 @@ jobs:
 
           echo "add samba user"
           sudo id -u "$user" &>/dev/null || sudo useradd -M -d "/samba/$user" -s /usr/sbin/nologin -G sambashare "$user"
-          
+
+          echo "create samba share user directory"
+          sudo mkdir "/samba/$user"
+
+          echo "change samba share user directory ownership"
+          sudo chown "$user":sambashare "/samba/$user"
+
+          echo "modify permissions on samba share user directory"
+          sudo chmod 2770 "/samba/$user"
+
+          echo "change smb password"
+          (echo "$pass"; echo "$pass") | sudo smbpasswd -a "$user"
+
+          echo "enable samba user"
+          (echo "$pass"; echo "$pass") | sudo smbpasswd -e "$user"
+
+          echo "restart services"
+          sudo systemctl restart smbd
+          sudo systemctl restart nmbd
          
           # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
           echo $HOME/bin >> $GITHUB_PATH
