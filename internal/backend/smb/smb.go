@@ -36,8 +36,6 @@ type Backend struct {
 	poolMu   sync.Mutex
 	pool     []*conn
 	drain    *time.Timer // used to drain the pool when we stop using the connections
-
-	ctx context.Context
 }
 
 // make sure that *Backend implements backend.Backend
@@ -62,7 +60,6 @@ func open(ctx context.Context, cfg Config) (*Backend, error) {
 	b := &Backend{
 		Config: cfg,
 		sem:    sem,
-		ctx:    ctx,
 		Layout: l,
 	}
 
