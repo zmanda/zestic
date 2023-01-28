@@ -12,13 +12,6 @@ import (
 	rtest "github.com/restic/restic/internal/test"
 )
 
-func mkdir(t testing.TB, dir string) {
-	err := os.MkdirAll(dir, 0700)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func newTestSuite(t testing.TB) *test.Suite {
 	return &test.Suite{
 		// NewConfig returns a config for a new temporary backend that will be used in tests.
@@ -26,9 +19,10 @@ func newTestSuite(t testing.TB) *test.Suite {
 
 			cfg := smb.NewConfig()
 			cfg.Address = "127.0.0.1"
-			cfg.User = "smbuser"
+			cfg.User = os.Getenv("RESTIC_TEST_SMB_USERNAME")
 			cfg.ShareName = cfg.User
-			cfg.Password = options.NewSecretString("smbpass")
+			cfg.Path = "SMBPath"
+			cfg.Password = options.NewSecretString(os.Getenv("RESTIC_TEST_SMB_PASSWORD"))
 			cfg.Connections = smb.DefaultConnections
 			timeout := smb.DefaultIdleTimeout
 			cfg.IdleTimeout = &timeout
@@ -69,10 +63,6 @@ func TestBackendSMB(t *testing.T) {
 			rtest.SkipDisallowed(t, "restic/backend/smb.TestBackendSMB")
 		}
 	}()
-	//TODO remove hardcoding
-	os.Setenv("RESTIC_TEST_SMB_USERNAME", "smbuser")
-	os.Setenv("RESTIC_TEST_SMB_PASSWORD", "mGoWwqvgdnwtmh07")
-
 	vars := []string{
 		"RESTIC_TEST_SMB_USERNAME",
 		"RESTIC_TEST_SMB_PASSWORD",
@@ -91,10 +81,6 @@ func TestBackendSMB(t *testing.T) {
 }
 
 func BenchmarkBackendSMB(t *testing.B) {
-	//TODO remove hardcoding
-	os.Setenv("RESTIC_TEST_SMB_USERNAME", "smbuser")
-	os.Setenv("RESTIC_TEST_SMB_PASSWORD", "mGoWwqvgdnwtmh07")
-
 	vars := []string{
 		"RESTIC_TEST_SMB_USERNAME",
 		"RESTIC_TEST_SMB_PASSWORD",

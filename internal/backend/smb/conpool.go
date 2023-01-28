@@ -200,7 +200,7 @@ func (b *Backend) putConnection(pc **conn) {
 }
 
 // Drain the pool of any connections
-func (b *Backend) drainPool(ctx context.Context) (err error) {
+func (b *Backend) drainPool() (err error) {
 	b.poolMu.Lock()
 	defer b.poolMu.Unlock()
 	if sessions := b.getSessions(); sessions != 0 {

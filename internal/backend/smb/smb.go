@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -69,7 +70,7 @@ func open(ctx context.Context, cfg Config) (*Backend, error) {
 
 	// set the pool drainer timer going
 	if b.Config.IdleTimeout != nil && *b.Config.IdleTimeout > 0 {
-		b.drain = time.AfterFunc(*b.Config.IdleTimeout, func() { _ = b.drainPool(ctx) })
+		b.drain = time.AfterFunc(*b.Config.IdleTimeout, func() { _ = b.drainPool() })
 	}
 
 	cn, err := b.getConnection(ctx, b.ShareName)
@@ -132,7 +133,7 @@ func (b *Backend) Connections() uint {
 
 // Location returns this backend's location (the directory name).
 func (b *Backend) Location() string {
-	return b.Path
+	return b.Join(b.ShareName, b.Path)
 }
 
 // Hasher may return a hash function for calculating a content hash for the backend
@@ -148,6 +149,11 @@ func (b *Backend) HasAtomicReplace() bool {
 // IsNotExist returns true if the error is caused by a non existing file.
 func (b *Backend) IsNotExist(err error) bool {
 	return errors.Is(err, os.ErrNotExist)
+}
+
+// Join combines path components with slashes.
+func (be *Backend) Join(p ...string) string {
+	return path.Join(p...)
 }
 
 // Save stores data in the backend at the handle.
@@ -363,9 +369,9 @@ func (b *Backend) List(ctx context.Context, t restic.FileType, fn func(restic.Fi
 
 	basedir, subdirs := b.Basedir(t)
 	if subdirs {
-		err = b.visitDirs(cn, basedir, fn)
+		err = b.visitDirs(cn, ctx, basedir, fn)
 	} else {
-		err = b.visitFiles(cn, basedir, fn, false)
+		err = b.visitFiles(cn, ctx, basedir, fn, false)
 	}
 
 	if b.IsNotExist(err) {
@@ -380,7 +386,7 @@ func (b *Backend) List(ctx context.Context, t restic.FileType, fn func(restic.Fi
 // two levels of directory structure (including dir itself as the first level).
 // Also, visitDirs assumes it sees a directory full of directories, while
 // visitFiles wants a directory full or regular files.
-func (b *Backend) visitDirs(cn *conn, dir string, fn func(restic.FileInfo) error) error {
+func (b *Backend) visitDirs(cn *conn, ctx context.Context, dir string, fn func(restic.FileInfo) error) error {
 	d, err := cn.smbShare.Open(dir)
 	if err != nil {
 		return err
@@ -399,15 +405,15 @@ func (b *Backend) visitDirs(cn *conn, dir string, fn func(restic.FileInfo) error
 	}
 
 	for _, f := range sub {
-		err = b.visitFiles(cn, filepath.Join(dir, f), fn, true)
+		err = b.visitFiles(cn, ctx, filepath.Join(dir, f), fn, true)
 		if err != nil {
 			return err
 		}
 	}
-	return b.ctx.Err()
+	return ctx.Err()
 }
 
-func (b *Backend) visitFiles(cn *conn, dir string, fn func(restic.FileInfo) error, ignoreNotADirectory bool) error {
+func (b *Backend) visitFiles(cn *conn, ctx context.Context, dir string, fn func(restic.FileInfo) error, ignoreNotADirectory bool) error {
 	d, err := cn.smbShare.Open(dir)
 	if err != nil {
 		return err
@@ -436,8 +442,8 @@ func (b *Backend) visitFiles(cn *conn, dir string, fn func(restic.FileInfo) erro
 
 	for _, fi := range sub {
 		select {
-		case <-b.ctx.Done():
-			return b.ctx.Err()
+		case <-ctx.Done():
+			return ctx.Err()
 		default:
 		}
 
@@ -460,13 +466,13 @@ func (b *Backend) Delete(ctx context.Context) error {
 		return err
 	}
 	defer b.putConnection(&cn)
-	return cn.smbShare.RemoveAll(b.Path)
+	return cn.smbShare.RemoveAll(b.Location())
 }
 
 // Close closes all open files.
 func (b *Backend) Close() error {
 	debug.Log("Close()")
-	err := b.drainPool(b.ctx)
+	err := b.drainPool()
 	return err
 }
 
