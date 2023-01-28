@@ -91,28 +91,53 @@ jobs:
             sudo apt-get install samba -y          
           fi
           
-          echo "create samba share directory"
-          mkdir ./SMBShare
-
-          echo "modifying samba config"
-          echo '[sambashare] ' | sudo tee -a /etc/samba/smb.conf
-          echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
-          echo '    path = ./SMBShare' | sudo tee -a /etc/samba/smb.conf
-          echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
-          echo '    browsable = yes' | sudo tee -a /etc/samba/smb.conf
-
-          sudo systemctl restart smbd.service
-          echo "samba service restarted"
-
           user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
           pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
-          echo "$user"
-          sudo id -u "$user" &>/dev/null || sudo useradd "$user"
-          echo "$user:$pass" | sudo chpasswd
           
-          (echo "$pass"; echo "$pass") | sudo smbpasswd -s -a "$user"
-          sudo systemctl restart smbd.service
-          echo "samba service restarted after adding user"
+          echo "Allow Samba in firewall"
+          sudo ufw allow 'Samba'
+          
+          echo "modifying samba config"
+		      echo "[$user]" | sudo tee -a /etc/samba/smb.conf
+		      echo '    comment = Samba on Ubuntu' | sudo tee -a /etc/samba/smb.conf
+          echo "    path = /samba/$user" | sudo tee -a /etc/samba/smb.conf
+          echo '    browseable = yes' | sudo tee -a /etc/samba/smb.conf
+          echo '    read only = no' | sudo tee -a /etc/samba/smb.conf
+          echo '    force create mode = 0660' | sudo tee -a /etc/samba/smb.conf
+          echo '    force directory mode = 2770' | sudo tee -a /etc/samba/smb.conf
+          echo "    valid users = $user" | sudo tee -a /etc/samba/smb.conf
+	
+          echo "restart services"
+          sudo systemctl restart smbd
+          sudo systemctl restart nmbd
+
+          echo "create samba share directory"
+          sudo mkdir /samba
+
+          echo "change sambashare group"
+          sudo chgrp sambashare /samba
+
+          echo "add samba user"
+          sudo id -u "$user" &>/dev/null || sudo useradd -M -d "/samba/$user" -s /usr/sbin/nologin -G sambashare "$user"
+
+          echo "create samba share user directory"
+          sudo mkdir "/samba/$user"
+          
+		      echo "change samba share user directory ownership"
+          sudo chown "$user":sambashare "/samba/$user"
+
+          echo "modify permissions on samba share user directory"
+          sudo chmod 2770 "/samba/$user"
+
+          echo "change smb password"
+          (echo "$pass"; echo "$pass") | sudo smbpasswd -a "$user"
+
+          echo "enable samba user"
+          (echo "$pass"; echo "$pass") | sudo smbpasswd -e "$user"
+
+          echo "restart services"
+          sudo systemctl restart smbd
+          sudo systemctl restart nmbd
 
           # add $HOME/bin to path ($GOBIN was already added to the path by setup-go@v3)
           echo $HOME/bin >> $GITHUB_PATH
