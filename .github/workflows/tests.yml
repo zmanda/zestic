@@ -185,20 +185,8 @@ jobs:
           # Create new smbshare
           $user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
           $pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}	
-          $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force	
-
-          echo "Create user"
-          New-LocalUser $user -Password $SecurePassword -FullName "SMB User" -Description "Account used for smb access."
-
-          $path="$Env:USERPROFILE\$user"	
-          mkdir $path
-
-          echo "Create share"
-          New-SmbShare -Name $user -Path $path -EncryptData $True
-
-          echo "Grant access to share"
-          Grant-SmbShareAccess -Name $user -AccountName $user -AccessRight Full -Force
-
+          $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force
+          
           # add $USERPROFILE/tar/bin to path
           echo $Env:USERPROFILE\tar\bin >> $Env:GITHUB_PATH
         if: matrix.os == 'windows-latest'
