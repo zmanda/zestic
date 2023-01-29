@@ -54,6 +54,9 @@ jobs:
 
     steps:
       - name: Set up Go ${{ matrix.go }}
+        env:
+              RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
+              RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
         uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go }}
@@ -91,8 +94,8 @@ jobs:
             sudo apt-get install samba -y          
           fi
           
-          user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
-          pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
+          user=$env:secrets.RESTIC_TEST_SMB_USERNAME
+          pass=$env:secrets.RESTIC_TEST_SMB_PASSWORD
 
           echo "Allow Samba in firewall"
           sudo ufw allow 'Samba'
@@ -148,6 +151,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest'
 
       - name: Get programs (Windows)
+        env:
+            RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
+            RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
         shell: powershell
         run: |
           $ProgressPreference = 'SilentlyContinue'
@@ -183,10 +189,22 @@ jobs:
           unzip libiconv.zip
 
           # Create new smbshare
-          $user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
-          $pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}	
-          $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force
-          
+          $user="%RESTIC_TEST_SMB_USERNAME%"
+          $pass="%secrets.RESTIC_TEST_SMB_PASSWORD%"
+          $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force	
+
+          echo "Create user"
+          New-LocalUser $user -Password $SecurePassword -FullName "SMB User" -Description "Account used for smb access."
+
+          $path="$Env:USERPROFILE\$user"	
+          mkdir $path
+
+          echo "Create share"
+          New-SmbShare -Name $user -Path $path -EncryptData $True
+
+          echo "Grant access to share"
+          Grant-SmbShareAccess -Name $user -AccountName $user -AccessRight Full -Force
+
           # add $USERPROFILE/tar/bin to path
           echo $Env:USERPROFILE\tar\bin >> $Env:GITHUB_PATH
         if: matrix.os == 'windows-latest'
