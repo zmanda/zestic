@@ -92,8 +92,8 @@ jobs:
             sudo apt-get install samba -y          
           fi
           
-          user=smbuser
-          pass=mGoWwqvgdnwtmh07
+          user="smbuser"
+          pass="mGoWwqvgdnwtmh07"
 
           echo "Allow Samba in firewall"
           sudo ufw allow 'Samba'
@@ -184,8 +184,8 @@ jobs:
           unzip libiconv.zip
 
           # Create new smbshare
-          $user=smbuser
-          $pass=mGoWwqvgdnwtmh07
+          $user="smbuser"
+          $pass="mGoWwqvgdnwtmh07"
           $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force	
 
           echo "Create user"
