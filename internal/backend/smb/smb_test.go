@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/restic/restic/internal/backend/smb"
 	"github.com/restic/restic/internal/backend/test"
 	"github.com/restic/restic/internal/options"
@@ -20,7 +21,7 @@ func newTestSuite(t testing.TB) *test.Suite {
 			cfg.Address = "127.0.0.1"
 			cfg.User = "smbuser"
 			cfg.ShareName = cfg.User
-			cfg.Path = "SMBPath"
+			cfg.Path = "Repo-" + uuid.New().String()
 			cfg.Password = options.NewSecretString("mGoWwqvgdnwtmh07")
 			cfg.Connections = smb.DefaultConnections
 			timeout := smb.DefaultIdleTimeout
