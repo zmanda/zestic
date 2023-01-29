@@ -27,6 +27,7 @@ jobs:
           #   go: 1.19.x
           #   os: macOS-latest
           #   test_fuse: false
+          #   test_smb: false
 
           # - job_name: Linux
           #   go: 1.19.x
@@ -54,9 +55,6 @@ jobs:
 
     steps:
       - name: Set up Go ${{ matrix.go }}
-        env:
-              RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
-              RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
         uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go }}
@@ -94,8 +92,8 @@ jobs:
             sudo apt-get install samba -y          
           fi
           
-          user="$RESTIC_TEST_SMB_USERNAME"
-          pass="$RESTIC_TEST_SMB_PASSWORD"
+          user=smbuser
+          pass=mGoWwqvgdnwtmh07
 
           echo "Allow Samba in firewall"
           sudo ufw allow 'Samba'
@@ -151,9 +149,6 @@ jobs:
         if: matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest'
 
       - name: Get programs (Windows)
-        env:
-            RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
-            RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
         shell: powershell
         run: |
           $ProgressPreference = 'SilentlyContinue'
@@ -189,8 +184,8 @@ jobs:
           unzip libiconv.zip
 
           # Create new smbshare
-          $user="$env:RESTIC_TEST_SMB_USERNAME"
-          $pass="$env:RESTIC_TEST_SMB_PASSWORD"
+          $user=smbuser
+          $pass=mGoWwqvgdnwtmh07
           $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force	
 
           echo "Create user"
@@ -219,6 +214,7 @@ jobs:
       - name: Run local Tests
         env:
           RESTIC_TEST_FUSE: ${{ matrix.test_fuse }}
+          RESTIC_TEST_SMB: ${{ matrix.test_smb }}
         run: |
           go test -cover ${{matrix.test_opts}} ./...
 
@@ -227,8 +223,6 @@ jobs:
           RESTIC_TEST_S3_KEY: ${{ secrets.RESTIC_TEST_S3_KEY }}
           RESTIC_TEST_S3_SECRET: ${{ secrets.RESTIC_TEST_S3_SECRET }}
           RESTIC_TEST_S3_REPOSITORY: ${{ secrets.RESTIC_TEST_S3_REPOSITORY }}
-          RESTIC_TEST_SMB_USERNAME: ${{ secrets.RESTIC_TEST_SMB_USERNAME }}
-          RESTIC_TEST_SMB_PASSWORD: ${{ secrets.RESTIC_TEST_SMB_PASSWORD }}
           RESTIC_TEST_AZURE_ACCOUNT_NAME: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_NAME }}
           RESTIC_TEST_AZURE_ACCOUNT_KEY: ${{ secrets.RESTIC_TEST_AZURE_ACCOUNT_KEY }}
           RESTIC_TEST_AZURE_REPOSITORY: ${{ secrets.RESTIC_TEST_AZURE_REPOSITORY }}

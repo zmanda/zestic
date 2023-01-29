@@ -792,6 +792,8 @@ func open(ctx context.Context, s string, gopts GlobalOptions, opts options.Optio
 		be, err = local.Open(ctx, cfg.(local.Config))
 	case "sftp":
 		be, err = sftp.Open(ctx, cfg.(sftp.Config))
+	case "smb":
+		be, err = smb.Open(ctx, cfg.(smb.Config))
 	case "s3":
 		be, err = s3.Open(ctx, cfg.(s3.Config), rt)
 	case "gs":
@@ -806,8 +808,6 @@ func open(ctx context.Context, s string, gopts GlobalOptions, opts options.Optio
 		be, err = rest.Open(cfg.(rest.Config), rt)
 	case "rclone":
 		be, err = rclone.Open(cfg.(rclone.Config), lim)
-	case "smb":
-		be, err = smb.Open(ctx, cfg.(smb.Config))
 
 	default:
 		return nil, errors.Fatalf("invalid backend: %q", loc.Scheme)
@@ -825,7 +825,7 @@ func open(ctx context.Context, s string, gopts GlobalOptions, opts options.Optio
 		}
 	}
 
-	if loc.Scheme == "local" || loc.Scheme == "sftp" {
+	if loc.Scheme == "local" || loc.Scheme == "sftp" || loc.Scheme == "smb" {
 		// wrap the backend in a LimitBackend so that the throughput is limited
 		be = limiter.LimitBackend(be, lim)
 	}
@@ -866,6 +866,8 @@ func create(ctx context.Context, s string, opts options.Options) (restic.Backend
 		return local.Create(ctx, cfg.(local.Config))
 	case "sftp":
 		return sftp.Create(ctx, cfg.(sftp.Config))
+	case "smb":
+		return smb.Create(ctx, cfg.(smb.Config))
 	case "s3":
 		return s3.Create(ctx, cfg.(s3.Config), rt)
 	case "gs":

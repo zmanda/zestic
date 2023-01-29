@@ -2,7 +2,6 @@ package smb_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/restic/restic/internal/backend/smb"
@@ -19,10 +18,10 @@ func newTestSuite(t testing.TB) *test.Suite {
 
 			cfg := smb.NewConfig()
 			cfg.Address = "127.0.0.1"
-			cfg.User = os.Getenv("RESTIC_TEST_SMB_USERNAME")
+			cfg.User = "smbuser"
 			cfg.ShareName = cfg.User
 			cfg.Path = "SMBPath"
-			cfg.Password = options.NewSecretString(os.Getenv("RESTIC_TEST_SMB_PASSWORD"))
+			cfg.Password = options.NewSecretString("mGoWwqvgdnwtmh07")
 			cfg.Connections = smb.DefaultConnections
 			timeout := smb.DefaultIdleTimeout
 			cfg.IdleTimeout = &timeout
@@ -58,40 +57,19 @@ func newTestSuite(t testing.TB) *test.Suite {
 }
 
 func TestBackendSMB(t *testing.T) {
-	defer func() {
-		if t.Skipped() {
-			rtest.SkipDisallowed(t, "restic/backend/smb.TestBackendSMB")
-		}
-	}()
-	vars := []string{
-		"RESTIC_TEST_SMB_USERNAME",
-		"RESTIC_TEST_SMB_PASSWORD",
+	if !rtest.RunSMBTest {
+		t.Skip("Skipping smb tests")
 	}
-
-	for _, v := range vars {
-		if os.Getenv(v) == "" {
-			t.Skipf("environment variable %v not set", v)
-			return
-		}
-	}
-
 	t.Logf("run tests")
 
 	newTestSuite(t).RunTests(t)
 }
 
 func BenchmarkBackendSMB(t *testing.B) {
-	vars := []string{
-		"RESTIC_TEST_SMB_USERNAME",
-		"RESTIC_TEST_SMB_PASSWORD",
+	if !rtest.RunSMBTest {
+		t.Skip("Skipping smb tests")
 	}
-
-	for _, v := range vars {
-		if os.Getenv(v) == "" {
-			t.Skipf("environment variable %v not set", v)
-			return
-		}
-	}
+	t.Logf("run benchmarks")
 
 	newTestSuite(t).RunBenchmarks(t)
 }
