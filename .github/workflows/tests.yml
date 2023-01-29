@@ -94,8 +94,8 @@ jobs:
             sudo apt-get install samba -y          
           fi
           
-          user=$env:secrets.RESTIC_TEST_SMB_USERNAME
-          pass=$env:secrets.RESTIC_TEST_SMB_PASSWORD
+          user="$RESTIC_TEST_SMB_USERNAME"
+          pass="$RESTIC_TEST_SMB_PASSWORD"
 
           echo "Allow Samba in firewall"
           sudo ufw allow 'Samba'
@@ -189,8 +189,8 @@ jobs:
           unzip libiconv.zip
 
           # Create new smbshare
-          $user="%RESTIC_TEST_SMB_USERNAME%"
-          $pass="%secrets.RESTIC_TEST_SMB_PASSWORD%"
+          $user="$env:RESTIC_TEST_SMB_USERNAME"
+          $pass="$env:RESTIC_TEST_SMB_PASSWORD"
           $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force	
 
           echo "Create user"
