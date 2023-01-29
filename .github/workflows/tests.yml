@@ -19,21 +19,21 @@ jobs:
       matrix:
         # list of jobs to run:
         include:
-          # - job_name: Windows
-          #   go: 1.19.x
-          #   os: windows-latest
+          - job_name: Windows
+            go: 1.19.x
+            os: windows-latest
 
           # - job_name: macOS
           #   go: 1.19.x
           #   os: macOS-latest
           #   test_fuse: false
 
-          - job_name: Linux
-            go: 1.19.x
-            os: ubuntu-latest
-            test_cloud_backends: true
-            test_fuse: true
-            check_changelog: true
+          # - job_name: Linux
+          #   go: 1.19.x
+          #   os: ubuntu-latest
+          #   test_cloud_backends: true
+          #   test_fuse: true
+          #   check_changelog: true
 
           # - job_name: Linux (race)
           #   go: 1.19.x
@@ -181,6 +181,23 @@ jobs:
           unzip libintl.zip
           Invoke-WebRequest https://github.com/restic/test-assets/raw/master/libiconv-1.8-1-bin.zip -OutFile libiconv.zip
           unzip libiconv.zip
+
+          # Create new smbshare
+          $user=${{ secrets.RESTIC_TEST_SMB_USERNAME }}
+          $pass=${{ secrets.RESTIC_TEST_SMB_PASSWORD }}	
+          $SecurePassword = $pass | ConvertTo-SecureString -AsPlainText -Force	
+
+          echo "Create user"
+          New-LocalUser $user -Password $SecurePassword -FullName "SMB User" -Description "Account used for smb access."
+
+          $path="C:\$user"	
+          mkdir $path
+
+          echo "Create share"
+          New-SmbShare -Name $user -Path "C:\$user" -EncryptData $True
+
+          echo "Grant access to share"
+          Grant-SmbShareAccess -Name $user -AccountName $user -AccessRight Full -Force
 
           # add $USERPROFILE/tar/bin to path
           echo $Env:USERPROFILE\tar\bin >> $Env:GITHUB_PATH
