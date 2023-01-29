@@ -193,7 +193,7 @@ jobs:
 
           Add-LocalGroupMember -Group "Administrators" -Member "$user"
           
-          $path="$Env:USERPROFILE\$user"	
+          $path="C:\$user"	
           mkdir $path
 
           echo "Create share"
