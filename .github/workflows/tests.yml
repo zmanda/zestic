@@ -191,11 +191,13 @@ jobs:
           echo "Create user"
           New-LocalUser $user -Password $SecurePassword -FullName "SMB User" -Description "Account used for smb access."
 
+          Add-LocalGroupMember -Group "Administrators" -Member "$user"
+          
           $path="$Env:USERPROFILE\$user"	
           mkdir $path
 
           echo "Create share"
-          New-SmbShare -Name $user -Path $path -EncryptData $True
+          New-SmbShare -Name $user -Path $path -FullAccess "Administrators" -EncryptData $True
 
           echo "Grant access to share"
           Grant-SmbShareAccess -Name $user -AccountName $user -AccessRight Full -Force
