@@ -27,7 +27,7 @@ jobs:
             go: 1.19.x
             os: macOS-latest
             test_fuse: false
-			      test_smb: false
+            test_smb: false
 
           - job_name: Linux
             go: 1.19.x
