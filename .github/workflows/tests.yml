@@ -271,3 +271,123 @@ jobs:
           echo "check changelog files"
           calens
         if: matrix.check_changelog
+
+  cross_compile:
+    strategy:
+
+      # ATTENTION: the list of architectures must be in sync with helpers/build-release-binaries/main.go!
+      matrix:
+        # run cross-compile in three batches parallel so the overall tests run faster
+        targets:
+          - "linux/386 linux/amd64 linux/arm linux/arm64 linux/ppc64le linux/mips linux/mipsle linux/mips64 linux/mips64le linux/riscv64 linux/s390x"
+
+          - "openbsd/386 openbsd/amd64 \
+            freebsd/386 freebsd/amd64 freebsd/arm \
+            aix/ppc64 \
+            darwin/amd64 darwin/arm64"
+
+          - "netbsd/386 netbsd/amd64 \
+            windows/386 windows/amd64 \
+            solaris/amd64"
+
+    env:
+      GOPROXY: https://proxy.golang.org
+
+    runs-on: ubuntu-latest
+
+    name: Cross Compile for ${{ matrix.targets }}
+
+    steps:
+      - name: Set up Go ${{ env.latest_go }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.latest_go }}
+
+      - name: Install gox
+        run: |
+          go install github.com/mitchellh/gox@latest
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Cross-compile with gox for ${{ matrix.targets }}
+        env:
+          GOFLAGS: "-trimpath"
+          GOX_ARCHS: "${{ matrix.targets }}"
+        run: |
+          mkdir build-output
+          gox -parallel 2 -verbose -osarch "$GOX_ARCHS" -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}" ./cmd/restic
+          gox -parallel 2 -verbose -osarch "$GOX_ARCHS" -tags debug -output "build-output/{{.Dir}}_{{.OS}}_{{.Arch}}_debug" ./cmd/restic
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go ${{ env.latest_go }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ env.latest_go }}
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          # Required: the version of golangci-lint is required and must be specified without patch version: we always use the latest patch version.
+          version: v1.49
+          # Optional: show only new issues if it's a pull request. The default value is `false`.
+          only-new-issues: true
+          args: --verbose --timeout 5m
+
+        # only run golangci-lint for pull requests, otherwise ALL hints get
+        # reported. We need to slowly address all issues until we can enable
+        # linting the master branch :)
+        if: github.event_name == 'pull_request'
+
+      - name: Check go.mod/go.sum
+        run: |
+          echo "check if go.mod and go.sum are up to date"
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            restic/restic
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v3
+        with:
+          push: false
+          context: .
+          file: docker/Dockerfile
+          pull: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
