@@ -1,10 +1,11 @@
 name: test
 on:
-  # run tests on push to branch
+  # run tests on push to master, but not when other branches are pushed to
   workflow_dispatch: {}
   push:
     branches:
       - 'feature/smb-test-setup'
+	    - master
 
   # run tests for all pull requests
   pull_request:
@@ -23,11 +24,11 @@ jobs:
             go: 1.19.x
             os: windows-latest
 
-          # - job_name: macOS
-          #   go: 1.19.x
-          #   os: macOS-latest
-          #   test_fuse: false
-          #   test_smb: false
+          - job_name: macOS
+            go: 1.19.x
+            os: macOS-latest
+            test_fuse: false
+			      test_smb: false
 
           - job_name: Linux
             go: 1.19.x
@@ -36,16 +37,16 @@ jobs:
             test_fuse: true
             check_changelog: true
 
-          # - job_name: Linux (race)
-          #   go: 1.19.x
-          #   os: ubuntu-latest
-          #   test_fuse: true
-          #   test_opts: "-race"
+          - job_name: Linux (race)
+            go: 1.19.x
+            os: ubuntu-latest
+            test_fuse: true
+            test_opts: "-race"
 
-          # - job_name: Linux
-          #   go: 1.18.x
-          #   os: ubuntu-latest
-          #   test_fuse: true
+          - job_name: Linux
+            go: 1.18.x
+            os: ubuntu-latest
+            test_fuse: true
 
     name: ${{ matrix.job_name }} Go ${{ matrix.go }}
     runs-on: ${{ matrix.os }}
@@ -65,7 +66,7 @@ jobs:
           go install github.com/restic/rest-server/cmd/rest-server@latest
 
           echo "install minio server"
-          mkdir -p $HOME/bin
+          mkdir $HOME/bin
           if [ "$RUNNER_OS" == "macOS" ]; then
             wget --no-verbose -O $HOME/bin/minio https://dl.minio.io/server/minio/release/darwin-amd64/minio
           else
