@@ -27,7 +27,6 @@ jobs:
             go: 1.19.x
             os: macOS-latest
             test_fuse: false
-            test_smb: false
 
           - job_name: Linux
             go: 1.19.x
@@ -217,7 +216,6 @@ jobs:
       - name: Run local Tests
         env:
           RESTIC_TEST_FUSE: ${{ matrix.test_fuse }}
-          RESTIC_TEST_SMB: ${{ matrix.test_smb }}
         run: |
           go test -cover ${{matrix.test_opts}} ./...
 
