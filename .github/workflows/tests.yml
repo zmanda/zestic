@@ -191,6 +191,7 @@ jobs:
           echo "Create user"
           New-LocalUser $user -Password $SecurePassword -FullName "SMB User" -Description "Account used for smb access."
 
+          echo "Making user admin"
           Add-LocalGroupMember -Group "Administrators" -Member "$user"
           
           $path="C:\$user"	
