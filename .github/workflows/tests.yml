@@ -1,6 +1,7 @@
 name: test
 on:
   # run tests on push to master, but not when other branches are pushed to
+  change-workflow-trigger
   workflow_dispatch: {}
   push:
     branches:
