@@ -75,13 +75,9 @@ func (b *Backend) dial(ctx context.Context, network, addr string) (*conn, error)
 		copy(clientId[:], []byte(b.ClientGuid))
 	}
 
-	rms := b.RequireMessageSigning != nil
-	if rms {
-		rms = *b.RequireMessageSigning
-	}
 	d := &smb2.Dialer{
 		Negotiator: smb2.Negotiator{
-			RequireMessageSigning: rms,
+			RequireMessageSigning: b.RequireMessageSigning,
 			SpecifiedDialect:      b.Dialect,
 			ClientGuid:            clientId,
 		},
@@ -109,7 +105,7 @@ func (b *Backend) newConnection(share string) (c *conn, err error) {
 	// them from the current context
 	ctx := context.Background()
 
-	c, err = b.dial(ctx, "tcp", b.Address+":"+strconv.Itoa(b.Port))
+	c, err = b.dial(ctx, "tcp", b.Host+":"+strconv.Itoa(b.Port))
 	if err != nil {
 		return nil, fmt.Errorf("couldn't connect SMB: %w", err)
 	}
@@ -193,9 +189,7 @@ func (b *Backend) putConnection(pc **conn) {
 
 	b.poolMu.Lock()
 	b.pool = append(b.pool, c)
-	if b.Config.IdleTimeout != nil && *b.Config.IdleTimeout > 0 {
-		b.drain.Reset(*b.Config.IdleTimeout) // nudge on the pool emptying timer
-	}
+	b.drain.Reset(b.Config.IdleTimeout) // nudge on the pool emptying timer
 	b.poolMu.Unlock()
 }
 
@@ -205,12 +199,10 @@ func (b *Backend) drainPool() (err error) {
 	defer b.poolMu.Unlock()
 	if sessions := b.getSessions(); sessions != 0 {
 		debug.Log("Not closing %d unused connections as %d sessions active", len(b.pool), sessions)
-		if b.Config.IdleTimeout != nil && *b.Config.IdleTimeout > 0 {
-			b.drain.Reset(*b.Config.IdleTimeout) // nudge on the pool emptying timer
-		}
+		b.drain.Reset(b.Config.IdleTimeout) // nudge on the pool emptying timer
 		return nil
 	}
-	if b.Config.IdleTimeout != nil && *b.Config.IdleTimeout > 0 {
+	if b.Config.IdleTimeout > 0 {
 		b.drain.Stop()
 	}
 	if len(b.pool) != 0 {

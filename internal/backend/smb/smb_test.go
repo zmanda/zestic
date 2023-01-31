@@ -18,17 +18,17 @@ func newTestSuite(t testing.TB) *test.Suite {
 		NewConfig: func() (interface{}, error) {
 
 			cfg := smb.NewConfig()
-			cfg.Address = "127.0.0.1"
+			cfg.Host = "127.0.0.1"
 			cfg.User = "smbuser"
 			cfg.ShareName = cfg.User
 			cfg.Path = "Repo-" + uuid.New().String()
 			cfg.Password = options.NewSecretString("mGoWwqvgdnwtmh07")
 			cfg.Connections = smb.DefaultConnections
 			timeout := smb.DefaultIdleTimeout
-			cfg.IdleTimeout = &timeout
+			cfg.IdleTimeout = timeout
 			cfg.Domain = smb.DefaultDomain
 
-			t.Logf("create new backend at %v", cfg.Address+"/"+cfg.ShareName)
+			t.Logf("create new backend at %v", cfg.Host+"/"+cfg.ShareName)
 
 			return cfg, nil
 		},
