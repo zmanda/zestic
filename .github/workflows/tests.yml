@@ -83,16 +83,20 @@ jobs:
           chmod 755 $HOME/bin/rclone
           rm -rf rclone*
 
-          echo "install samba"
           user="smbuser"
           pass="mGoWwqvgdnwtmh07"
 
           if [ "$RUNNER_OS" == "macOS" ]; then
+            echo "Get computer name"
             computername=$(sudo -S scutil --get ComputerName)
+            echo "Setup smb share"
             sudo -S sharing -a ~/$user
+            echo "Enable share for user"
             sudo -S pwpolicy -u $user -sethashtypes SMB-NT on
+            echo "Export domain"
             export RESTIC_SMB_DOMAIN=$computername".local"
           else
+            echo "install samba"
             sudo apt-get update
             sudo apt-get install samba -y      
                         
