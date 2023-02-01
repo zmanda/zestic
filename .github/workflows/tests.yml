@@ -87,7 +87,12 @@ jobs:
           user="smbuser"
           pass="mGoWwqvgdnwtmh07"
 
-          if [ "$RUNNER_OS" != "macOS" ]; then
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            computername=$(sudo -S scutil --get ComputerName)
+            sudo -S sharing -a ~/$user
+            sudo -S pwpolicy -u $user -sethashtypes SMB-NT on
+            export RESTIC_SMB_DOMAIN=$computername".local"
+          else
             sudo apt-get update
             sudo apt-get install samba -y      
                         
