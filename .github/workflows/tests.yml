@@ -91,14 +91,26 @@ jobs:
           smbpass="mGoWwqvgdnwtmh07"
 
           if [ "$RUNNER_OS" == "macOS" ]; then
+            smbhome=/Users/$smbuser
             echo "Get computer name"
             computername=$(sudo -S scutil --get ComputerName)
-            echo "Make share directory"
-            mkdir ~/$smbuser
+            echo "Create smb user"
+            sudo dscl . -create /Users/$smbuser
+            sudo dscl . -create /Users/$smbuser UserShell /bin/bash
+            sudo dscl . -create /Users/$smbuser RealName $smbuser
+            sudo dscl . -create /Users/$smbuser UniqueID 12001
+            sudo dscl . -create /Users/$smbuser PrimaryGroupID 12002
+            sudo dscl . -create /Users/$smbuser NFSHomeDirectory $smbhome
+            sudo dscl . -passwd /Users/$smbuser $smbpass
+            sudo dscl . -append /Groups/admin GroupMembership $smbuser
+
+            echo "Make home dir"
+            sudo createhomedir -u $smbuser -c
+           
             echo "Setup smb share"
-            sudo -S sharing -a ~/$smbuser
+            sudo sharing -a $smbhome
             echo "Enable share for os user"
-            sudo -S pwpolicy -u $USER -sethashtypes SMB-NT on
+            sudo pwpolicy -u $smbuser -sethashtypes SMB-NT on
             echo "Export domain"
             export RESTIC_SMB_DOMAIN=$computername".local"
           else
