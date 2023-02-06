@@ -117,7 +117,7 @@ jobs:
             sudo pwpolicy -u $smbuser -sethashtypes SMB-NT on
             sudo dscl . -passwd /Users/$smbuser $smbpass
             echo "Export domain"
-            export RESTIC_SMB_DOMAIN=$computername".local"
+            export RESTIC_SMB_DOMAIN=$computername
             echo $RESTIC_SMB_DOMAIN
           else
             echo "install samba"
