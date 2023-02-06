@@ -98,19 +98,24 @@ jobs:
             sudo dscl . -create /Users/$smbuser
             sudo dscl . -create /Users/$smbuser UserShell /bin/bash
             sudo dscl . -create /Users/$smbuser RealName $smbuser
-            sudo dscl . -create /Users/$smbuser UniqueID 12001
-            sudo dscl . -create /Users/$smbuser PrimaryGroupID 12002
+            LastID=`dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1`
+            NextID=$((LastID + 1))
+            sudo dscl . -create /Users/$smbuser UniqueID $NextID
+            sudo dscl . -create /Users/$smbuser PrimaryGroupID 80
             sudo dscl . -create /Users/$smbuser NFSHomeDirectory $smbhome
             sudo dscl . -passwd /Users/$smbuser $smbpass
             sudo dscl . -append /Groups/admin GroupMembership $smbuser
-
+  
             echo "Make home dir"
             sudo createhomedir -u $smbuser -c
+            sudo mkdir $smbhome/$smbuser
+            sudo chown -R $smbuser:admin $smbhome
            
             echo "Setup smb share"
-            sudo sharing -a $smbhome
+            sudo sharing -a $smbhome/$smbuser
             echo "Enable share for os user"
             sudo pwpolicy -u $smbuser -sethashtypes SMB-NT on
+            sudo dscl . -passwd /Users/$smbuser $smbpass
             echo "Export domain"
             export RESTIC_SMB_DOMAIN=$computername".local"
           else
