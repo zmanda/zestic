@@ -2,13 +2,13 @@ package smb
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"hash"
 	"io"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -21,9 +21,28 @@ import (
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/errors"
 	"github.com/restic/restic/internal/restic"
-
-	"github.com/valyala/fastrand"
 )
+
+// Parts of this code have been copied from Rclone (https://github.com/rclone)
+// Copyright (C) 2012 by Nick Craig-Wood http://www.craig-wood.com/nick/
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 // Backend stores data on an SMB endpoint.
 type Backend struct {
@@ -74,7 +93,7 @@ func open(ctx context.Context, cfg Config) (*Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 
 	stat, err := cn.smbShare.Stat(l.Filename(restic.Handle{Type: restic.ConfigFile}))
 	m := backend.DeriveModesFromFileInfo(stat, err)
@@ -105,7 +124,7 @@ func Create(ctx context.Context, cfg Config) (*Backend, error) {
 	if err != nil {
 		return b, err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 
 	// test if config file already exists
 	_, err = cn.smbShare.Lstat(b.Filename(restic.Handle{Type: restic.ConfigFile}))
@@ -160,8 +179,9 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 		return backoff.Permanent(err)
 	}
 
-	finalname := b.Filename(h)
-	dir := filepath.Dir(finalname)
+	filename := b.Filename(h)
+	tmpFilename := filename + "-restic-temp-" + tempSuffix()
+	dir := filepath.Dir(tmpFilename)
 
 	defer func() {
 		// Mark non-retriable errors as such
@@ -173,9 +193,6 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 	b.sem.GetToken()
 	defer b.sem.ReleaseToken()
 
-	// Create new file with a temporary name.
-	tmpname := filepath.Base(finalname) + "-tmp-"
-
 	b.addSession() // Show session in use
 	defer b.removeSession()
 
@@ -183,9 +200,10 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 	if err != nil {
 		return err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 
-	f, err := b.CreateTemp(cn, dir, tmpname)
+	// create new file
+	f, err := cn.smbShare.OpenFile(tmpFilename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 
 	if b.IsNotExist(err) {
 		debug.Log("error %v: creating dir", err)
@@ -196,7 +214,7 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 			debug.Log("error creating dir %v: %v", dir, mkdirErr)
 		} else {
 			// try again
-			f, err = b.CreateTemp(cn, dir, tmpname)
+			f, err = cn.smbShare.OpenFile(tmpFilename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		}
 	}
 
@@ -237,14 +255,14 @@ func (b *Backend) Save(ctx context.Context, h restic.Handle, rd restic.RewindRea
 	if err = f.Close(); err != nil {
 		return errors.WithStack(err)
 	}
-	if err = cn.smbShare.Rename(f.Name(), finalname); err != nil {
+	if err = cn.smbShare.Rename(f.Name(), filename); err != nil {
 		return errors.WithStack(err)
 	}
 
 	// try to mark file as read-only to avoid accidential modifications
 	// ignore if the operation fails as some filesystems don't allow the chmod call
 	// e.g. exfat and network file systems with certain mount options
-	err = cn.setFileReadonly(finalname, b.Modes.File)
+	err = cn.setFileReadonly(filename, b.Modes.File)
 	if err != nil && !os.IsPermission(err) {
 		return errors.WithStack(err)
 	}
@@ -279,7 +297,7 @@ func (b *Backend) openReader(ctx context.Context, h restic.Handle, length int, o
 	if err != nil {
 		return nil, err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 
 	b.sem.GetToken()
 	f, err := cn.smbShare.Open(b.Filename(h))
@@ -320,7 +338,7 @@ func (b *Backend) Stat(ctx context.Context, h restic.Handle) (restic.FileInfo, e
 	if err != nil {
 		return restic.FileInfo{}, err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 
 	fi, err := cn.smbShare.Stat(b.Filename(h))
 	if err != nil {
@@ -342,7 +360,7 @@ func (b *Backend) Remove(ctx context.Context, h restic.Handle) error {
 	if err != nil {
 		return err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 
 	// reset read-only flag
 	err = cn.smbShare.Chmod(fn, 0666)
@@ -362,7 +380,7 @@ func (b *Backend) List(ctx context.Context, t restic.FileType, fn func(restic.Fi
 	if err != nil {
 		return err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 
 	basedir, subdirs := b.Basedir(t)
 	if subdirs {
@@ -462,7 +480,7 @@ func (b *Backend) Delete(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer b.putConnection(&cn)
+	defer b.putConnection(cn)
 	return cn.smbShare.RemoveAll(b.Location())
 }
 
@@ -473,85 +491,13 @@ func (b *Backend) Close() error {
 	return err
 }
 
-const (
-	pathSeparator = '/' // Always using '/' for SMB
-)
-
-// CreateTemp creates a new temporary file in the directory dir,
-// opens the file for reading and writing, and returns the resulting file.
-// The filename is generated by taking pattern and adding a random string to the end.
-// If pattern includes a "*", the random string replaces the last "*".
-// If dir is the empty string, CreateTemp uses the default directory for temporary files, as returned by TempDir.
-// Multiple programs or goroutines calling CreateTemp simultaneously will not choose the same file.
-// The caller can use the file's Name method to find the pathname of the file.
-// It is the caller's responsibility to remove the file when it is no longer needed.
-func (b *Backend) CreateTemp(cn *conn, dir, pattern string) (*smb2.File, error) {
-	if dir == "" {
-		dir = os.TempDir()
-	}
-
-	prefix, suffix, err := prefixAndSuffix(pattern)
+// tempSuffix generates a random string suffix that should be sufficiently long
+// to avoid accidental conflicts.
+func tempSuffix() string {
+	var nonce [16]byte
+	_, err := rand.Read(nonce[:])
 	if err != nil {
-		return nil, &fs.PathError{Op: "createtemp", Path: pattern, Err: err}
+		panic(err)
 	}
-	prefix = joinPath(dir, prefix)
-
-	try := 0
-	for {
-		name := prefix + nextRandom() + suffix
-		f, err := cn.smbShare.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
-
-		if os.IsExist(err) {
-			if try++; try < 10000 {
-				continue
-			}
-			return nil, &fs.PathError{Op: "createtemp", Path: prefix + "*" + suffix, Err: fs.ErrExist}
-		}
-		return f, err
-	}
-}
-
-var errPatternHasSeparator = errors.New("pattern contains path separator")
-
-// prefixAndSuffix splits pattern by the last wildcard "*", if applicable,
-// returning prefix as the part before "*" and suffix as the part after "*".
-func prefixAndSuffix(pattern string) (prefix, suffix string, err error) {
-	for i := 0; i < len(pattern); i++ {
-		if IsPathSeparator(pattern[i]) {
-			return "", "", errPatternHasSeparator
-		}
-	}
-	if pos := lastIndex(pattern, '*'); pos != -1 {
-		prefix, suffix = pattern[:pos], pattern[pos+1:]
-	} else {
-		prefix = pattern
-	}
-	return prefix, suffix, nil
-}
-
-// LastIndexByte from the strings package.
-func lastIndex(s string, sep byte) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == sep {
-			return i
-		}
-	}
-	return -1
-}
-
-func nextRandom() string {
-	return strconv.FormatUint(uint64(fastrand.Uint32()), 10)
-}
-
-func joinPath(dir, name string) string {
-	if len(dir) > 0 && IsPathSeparator(dir[len(dir)-1]) {
-		return dir + name
-	}
-	return dir + string(pathSeparator) + name
-}
-
-// IsPathSeparator reports whether c is a directory separator character.
-func IsPathSeparator(c uint8) bool {
-	// NOTE: Windows accepts / as path separator.
-	return c == '\\' || c == '/'
+	return hex.EncodeToString(nonce[:])
 }
