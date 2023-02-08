@@ -95,30 +95,35 @@ jobs:
             echo "Get computer name"
             computername=$(sudo -S scutil --get ComputerName)
             echo "Create smb user"
-            sudo dscl . -create /Users/$smbuser
-            sudo dscl . -create /Users/$smbuser UserShell /bin/bash
-            sudo dscl . -create /Users/$smbuser RealName $smbuser
+            sudo dscl . -create $smbhome
+            sudo dscl . -create $smbhome UserShell /bin/bash
+            sudo dscl . -create $smbhome RealName $smbuser
             LastID=`dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1`
             NextID=$((LastID + 1))
-            sudo dscl . -create /Users/$smbuser UniqueID $NextID
-            sudo dscl . -create /Users/$smbuser PrimaryGroupID 80
-            sudo dscl . -create /Users/$smbuser NFSHomeDirectory $smbhome
-            sudo dscl . -passwd /Users/$smbuser $smbpass
+            sudo dscl . -create $smbhome UniqueID $NextID
+            sudo dscl . -create $smbhome PrimaryGroupID 80
+            sudo dscl . -create $smbhome NFSHomeDirectory $smbhome
+            sudo dscl . -passwd $smbhome $smbpass
             sudo dscl . -append /Groups/admin GroupMembership $smbuser
-  
             echo "Make home dir"
+            cd /Users/
             sudo createhomedir -u $smbuser -c
-            sudo mkdir $smbhome/$smbuser
-            sudo chown -R "$smbuser":admin $smbhome
-           
+            sudo mkdir $smbhome/smbshare
+            sudo chown -R $smbuser $smbhome
+            sudo chmod -R 755 $smbhome
             echo "Setup smb share"
-            sudo sharing -a $smbhome/$smbuser
+            sudo sharing -a $smbhome/smbshare -S smbuser -n smbuser -s 001
             echo "Enable share for os user"
+            sudo pwpolicy -u $smbuser -sethashtypes SMB-NT off
+            sudo pwpolicy -u $smbuser -enableuser
+            echo "Export domain"
+            if [[ $computername != *.local ]]; then computername=$computername".local"; fi
+            export RESTIC_SMB_DOMAIN=$computername
             sudo pwpolicy -u $smbuser -sethashtypes SMB-NT on
             sudo dscl . -passwd /Users/$smbuser $smbpass
-            echo "Export domain"
-            export RESTIC_SMB_DOMAIN=$computername
-            echo $RESTIC_SMB_DOMAIN
+            sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.smbd.plist
+            sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.smb.server.plist EnabledServices -array disk
+
           else
             echo "install samba"
             sudo apt-get update
