@@ -3,6 +3,7 @@ package test
 import (
 	"compress/bzip2"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -47,10 +48,28 @@ func OKs(tb testing.TB, errs []error) {
 }
 
 // Equals fails the test if exp is not equal to act.
-func Equals(tb testing.TB, exp, act interface{}) {
+// msg is optional message to be printed, first param being format string and rest being arguments.
+func Equals(tb testing.TB, exp, act interface{}, msgs ...string) {
 	tb.Helper()
 	if !reflect.DeepEqual(exp, act) {
-		tb.Fatalf("\033[31m\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
+		var msgString string
+		if len(msgs) == 0 {
+			tb.Fatalf("\033[31m\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
+		} else if len(msgs) == 1 {
+			tb.Fatalf("\033[31m\n\n\t"+msgs[0]+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
+		} else {
+			args := make([]interface{}, len(msgs)-1)
+			firstRun := true
+			for i, s := range msgs {
+				if firstRun {
+					firstRun = false
+					continue
+				}
+				args[i-1] = s
+			}
+			msgString = fmt.Sprintf(msgs[0], args...)
+			tb.Fatalf("\033[31m\n\n\t"+msgString+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
+		}
 	}
 }
 
