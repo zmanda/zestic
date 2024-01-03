@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespec) error {
+func (node Node) restoreSymlinkTimestamps(_ string, _ [2]syscall.Timespec) error {
 	return nil
 }
 
@@ -42,6 +42,6 @@ func (node *Node) restoreGenericAttributes(_ string) error {
 }
 
 // fillGenericAttributes is a no-op on AIX.
-func (node *Node) fillGenericAttributes(_ string, fi os.FileInfo, stat *statT) error {
+func (node *Node) fillGenericAttributes(_ string, _ os.FileInfo, _ *statT) error {
 	return nil
 }
