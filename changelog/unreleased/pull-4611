@@ -1,0 +1,12 @@
+Enhancement: Back up windows-specific metadata like SecurityDescriptors, Extended Attributes, file Created time and File Attributes like hidden flag
+
+Restic did not back up multiple windows-specific meta-data.
+Restic now backs up SecurityDescriptors (owner, group, discretionary access control list (DACL), system access control list (SACL)), Windows Extended File Attributes, file Created time and File Attributes like hidden flag when backing up files and folders on windows.
+Because of Windows specific restrictions, backing up and restoring security descriptors is only possible when running restic with the `SeBackupPrivilege`, `SeRestorePrivilege` and `SeSecurityPrivilege` privilege or as an administrator.
+
+https://github.com/restic/restic/pull/4611
+https://github.com/restic/restic/pull/3622
+https://github.com/restic/restic/issues/2075
+https://github.com/restic/restic/issues/4509
+
+

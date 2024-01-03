@@ -241,7 +241,7 @@ func enableProcessPrivileges(names []string) error {
 	return enableDisableProcessPrivilege(names, SE_PRIVILEGE_ENABLED)
 }
 
-// disableProcessPrivileges disables privileges globally for the process.
+// DisableProcessPrivileges disables privileges globally for the process.
 func DisableProcessPrivileges(names []string) error {
 	return enableDisableProcessPrivilege(names, 0)
 }

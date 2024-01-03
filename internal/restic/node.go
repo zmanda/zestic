@@ -40,14 +40,17 @@ type OSType string
 
 const (
 	// Defining OS types
+
+	// WindowsOS is the OS type which represents windows
 	WindowsOS OSType = "Windows"
 
 	// Below are windows specific attributes.
-	// We use characters fa as the key for storing file attributes for windows within the generic attributes map.
+
+	// TypeFileAttribute is the GenericAttributeType used for storing file attributes for windows within the generic attributes map.
 	TypeFileAttribute GenericAttributeType = "WinFileAttrib"
-	// We use characters ct as the key for storing creation time within the generic attributes map.
+	// TypeCreationTime is the GenericAttributeType used for storing creation time within the generic attributes map.
 	TypeCreationTime GenericAttributeType = "WinCreationTime"
-	// We use characters sd as the key for storing security descriptor for windows information within the generic attributes map.
+	// TypeSecurityDescriptor is the GenericAttributeType used for storing security descriptor for windows within the generic attributes map.
 	TypeSecurityDescriptor GenericAttributeType = "WinSecurityDesc"
 
 	//Generic Attributes for other OS types should be defined here.

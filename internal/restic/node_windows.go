@@ -23,12 +23,12 @@ var (
 )
 
 // mknod is not supported on Windows.
-func mknod(path string, mode uint32, dev uint64) (err error) {
+func mknod(_ string, mode uint32, dev uint64) (err error) {
 	return errors.New("device nodes cannot be created on windows")
 }
 
 // Windows doesn't need lchown
-func lchown(path string, uid int, gid int) (err error) {
+func lchown(_ string, uid int, gid int) (err error) {
 	return nil
 }
 
