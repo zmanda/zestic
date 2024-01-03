@@ -50,7 +50,7 @@ func (node *Node) fillExtendedAttributes(path string) error {
 }
 
 // restoreGenericAttributes is no-op.
-func (node *Node) restoreGenericAttributes(path string) error {
+func (node *Node) restoreGenericAttributes(_ string) error {
 	for _, attr := range node.GenericAttributes {
 		handleUnknownGenericAttributeFound(attr.Name)
 	}
@@ -58,7 +58,7 @@ func (node *Node) restoreGenericAttributes(path string) error {
 }
 
 // fillGenericAttributes is a no-op.
-func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) error {
+func (node *Node) fillGenericAttributes(_ string, fi os.FileInfo, stat *statT) error {
 	return nil
 }
 
