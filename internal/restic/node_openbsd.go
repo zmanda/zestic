@@ -1,6 +1,9 @@
 package restic
 
-import "syscall"
+import (
+	"os"
+	"syscall"
+)
 
 func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespec) error {
 	return nil
@@ -10,18 +13,25 @@ func (s statT) atim() syscall.Timespec { return s.Atim }
 func (s statT) mtim() syscall.Timespec { return s.Mtim }
 func (s statT) ctim() syscall.Timespec { return s.Ctim }
 
-// Getxattr retrieves extended attribute data associated with path.
-func Getxattr(path, name string) ([]byte, error) {
-	return nil, nil
+// restoreExtendedAttributes is a no-op on openbsd.
+func (node Node) restoreExtendedAttributes(path string) error {
+	return nil
 }
 
-// Listxattr retrieves a list of names of extended attributes associated with the
-// given path in the file system.
-func Listxattr(path string) ([]string, error) {
-	return nil, nil
+// fillExtendedAttributes is a no-op on openbsd.
+func (node *Node) fillExtendedAttributes(path string) error {
+	return nil
 }
 
-// Setxattr associates name and data together as an attribute of path.
-func Setxattr(path, name string, data []byte) error {
+// restoreGenericAttributes is no-op on openbsd.
+func (node *Node) restoreGenericAttributes(path string) error {
+	for _, attr := range node.GenericAttributes {
+		handleUnknownGenericAttributeFound(attr.Name)
+	}
+	return nil
+}
+
+// fillGenericAttributes is a no-op on openbsd.
+func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) error {
 	return nil
 }

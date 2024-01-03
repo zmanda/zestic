@@ -26,6 +26,41 @@ type ExtendedAttribute struct {
 	Value []byte `json:"value"`
 }
 
+// GenericAttribute is a tuple storing the name and value pairs used internally by restic to provide support for OS-specific functionalities.
+// eg. For windows this is used for SecurityDescriptors, CreationTime, File Attributes like hidden, Security Descriptors etc.
+type GenericAttribute struct {
+	Name  string `json:"name"`
+	Value []byte `json:"value"`
+}
+
+// GenericAttributeType can be used for OS specific functionalities by defining specific types in each specific node_xx file.
+type GenericAttributeType string
+
+type OSType string
+
+const (
+	// Defining OS types
+	WindowsOS OSType = "Windows"
+
+	// Below are windows specific attributes.
+	// We use characters fa as the key for storing file attributes for windows within the generic attributes map.
+	TypeFileAttribute GenericAttributeType = "WinFileAttrib"
+	// We use characters ct as the key for storing creation time within the generic attributes map.
+	TypeCreationTime GenericAttributeType = "WinCreationTime"
+	// We use characters sd as the key for storing security descriptor for windows information within the generic attributes map.
+	TypeSecurityDescriptor GenericAttributeType = "WinSecurityDesc"
+
+	//Generic Attributes for other OS types should be defined here.
+)
+
+// When you create new GenericAttributeTypes for any OS, add an entry in this map.
+var genericAttributesForOS = map[string][]OSType{
+	//value is an array as some generic attributes may be handled in multiple OSs.
+	string(TypeFileAttribute):      {WindowsOS},
+	string(TypeCreationTime):       {WindowsOS},
+	string(TypeSecurityDescriptor): {WindowsOS},
+}
+
 // Node is a file, directory or other item in a backup.
 type Node struct {
 	Name       string      `json:"name"`
@@ -49,6 +84,7 @@ type Node struct {
 	// Must only be set of the linktarget cannot be encoded as valid utf8.
 	LinkTargetRaw      []byte              `json:"linktarget_raw,omitempty"`
 	ExtendedAttributes []ExtendedAttribute `json:"extended_attributes,omitempty"`
+	GenericAttributes  []GenericAttribute  `json:"generic_attributes,omitempty"`
 	Device             uint64              `json:"device,omitempty"` // in case of Type == "dev", stat.st_rdev
 	Content            IDs                 `json:"content"`
 	Subtree            *ID                 `json:"subtree,omitempty"`
@@ -139,6 +175,25 @@ func (node Node) GetExtendedAttribute(a string) []byte {
 	return nil
 }
 
+// GetGenericAttribute gets the generic attribute for the specified GenericAttributeType from the node.
+func (node Node) GetGenericAttribute(genericAttributeType GenericAttributeType) []byte {
+	for _, attr := range node.GenericAttributes {
+		if attr.Name == string(genericAttributeType) {
+			return attr.Value
+		}
+	}
+	return nil
+}
+
+// NewGenericAttribute constructs a new GenericAttribute.
+func NewGenericAttribute(name GenericAttributeType, bytes []byte) GenericAttribute {
+	extAttr := GenericAttribute{
+		Name:  string(name),
+		Value: bytes,
+	}
+	return extAttr
+}
+
 // CreateAt creates the node at the given path but does NOT restore node meta data.
 func (node *Node) CreateAt(ctx context.Context, path string, repo Repository) error {
 	debug.Log("create node %v at %v", node.Name, path)
@@ -201,14 +256,6 @@ func (node Node) restoreMetadata(path string) error {
 		}
 	}
 
-	if node.Type != "symlink" {
-		if err := fs.Chmod(path, node.Mode); err != nil {
-			if firsterr != nil {
-				firsterr = errors.WithStack(err)
-			}
-		}
-	}
-
 	if err := node.RestoreTimestamps(path); err != nil {
 		debug.Log("error restoring timestamps for dir %v: %v", path, err)
 		if firsterr != nil {
@@ -223,17 +270,25 @@ func (node Node) restoreMetadata(path string) error {
 		}
 	}
 
-	return firsterr
-}
-
-func (node Node) restoreExtendedAttributes(path string) error {
-	for _, attr := range node.ExtendedAttributes {
-		err := Setxattr(path, attr.Name, attr.Value)
-		if err != nil {
-			return err
+	if err := node.restoreGenericAttributes(path); err != nil {
+		debug.Log("error restoring generic attributes for %v: %v", path, err)
+		if firsterr != nil {
+			firsterr = err
 		}
 	}
-	return nil
+
+	//Moving RestoreTimestamps and restoreExtendedAttributes calls above as for readonly files
+	//calling Chmod below will no longer allow any modifications to be made on the file and the
+	//calls above would fail.
+	if node.Type != "symlink" {
+		if err := fs.Chmod(path, node.Mode); err != nil {
+			if firsterr != nil {
+				firsterr = errors.WithStack(err)
+			}
+		}
+	}
+
+	return firsterr
 }
 
 func (node Node) RestoreTimestamps(path string) error {
@@ -625,32 +680,14 @@ func (node *Node) fillExtra(path string, fi os.FileInfo) error {
 		return errors.Errorf("invalid node type %q", node.Type)
 	}
 
-	return node.fillExtendedAttributes(path)
-}
-
-func (node *Node) fillExtendedAttributes(path string) error {
-	xattrs, err := Listxattr(path)
-	debug.Log("fillExtendedAttributes(%v) %v %v", path, xattrs, err)
-	if err != nil {
-		return err
+	err := node.fillExtendedAttributes(path)
+	errGen := node.fillGenericAttributes(path, fi, stat)
+	if err == nil {
+		err = errGen
+	} else {
+		debug.Log("Error filling generic attributes for %v at %v : %v", node.Name, path, errGen)
 	}
-
-	node.ExtendedAttributes = make([]ExtendedAttribute, 0, len(xattrs))
-	for _, attr := range xattrs {
-		attrVal, err := Getxattr(path, attr)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "can not obtain extended attribute %v for %v:\n", attr, path)
-			continue
-		}
-		attr := ExtendedAttribute{
-			Name:  attr,
-			Value: attrVal,
-		}
-
-		node.ExtendedAttributes = append(node.ExtendedAttributes, attr)
-	}
-
-	return nil
+	return err
 }
 
 func mkfifo(path string, mode uint32) (err error) {
@@ -662,4 +699,41 @@ func (node *Node) fillTimes(stat *statT) {
 	atim := stat.atim()
 	node.ChangeTime = time.Unix(ctim.Unix())
 	node.AccessTime = time.Unix(atim.Unix())
+}
+
+// handleUnknownGenericAttributeFound is used for handling future versions and cross-OS repositories
+func handleUnknownGenericAttributeFound(genericAttributeName string) {
+	if checkGenericAttributeNameNotHandledAndPut(genericAttributeName) {
+		// Print the unique error only once for a given execution
+		value, exists := genericAttributesForOS[genericAttributeName]
+
+		var msg string
+		if exists {
+			//If genericAttributesForOS contains an entry but we still got here, it means the specific node_xx.go for the current OS did not handle it and the repository may have been originally created on a different OS.
+			msg = fmt.Sprintf("WARNING: Found a GenericAttributeType in the repository: %s which may not be compatible with your OS. Compatible OS: %v", genericAttributeName, value)
+		} else {
+			//If genericAttributesForOS in node.go does not know about this attribute, then the repository may have been created by a newer version which has a newer GenericAttributeType.
+			msg = fmt.Sprintf("WARNING: Found an unrecognized GenericAttributeType in the repository: %s. You may need to upgrade to latest version of restic.", genericAttributeName)
+			fmt.Fprintln(os.Stderr, msg)
+		}
+		debug.Log(msg)
+	}
+
+}
+
+var unknownGenericAttributesHandlingHistory = map[string]string{}
+
+// checkGenericAttributeNameNotHandledAndPut checks if the GenericAttributeType name entry
+// already exists and puts it in the map if not. Not syncing this code as it is not a
+// critical operation. At the most it will print a few extra warnings in the beginning
+// if called concurrently.
+func checkGenericAttributeNameNotHandledAndPut(value string) bool {
+	// Check if the key exists
+	if _, ok := unknownGenericAttributesHandlingHistory[value]; ok {
+		return false // Key exists, then it is already handled so return false
+	}
+
+	// Key doesn't exist, put the value and return true because it is already handled
+	unknownGenericAttributesHandlingHistory[value] = ""
+	return true
 }
