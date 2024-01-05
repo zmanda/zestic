@@ -1466,7 +1466,7 @@ func TestArchiverSnapshotSelect(t *testing.T) {
 			selFn: func(item string, fi os.FileInfo) bool {
 				return false
 			},
-			err: "error while saving tree: snapshot is empty",
+			err: "snapshot is empty",
 		},
 		{
 			name: "exclude-txt-files",

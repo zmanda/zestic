@@ -67,7 +67,7 @@ func (p *Progress) AddFile(size uint64) {
 	p.allBytesTotal += size
 }
 
-// AddFile starts tracking a new file with the given size
+// AddSize starts tracking a new file with the given size
 func (p *Progress) AddSize(size uint64) {
 	p.m.Lock()
 	defer p.m.Unlock()

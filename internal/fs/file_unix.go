@@ -50,13 +50,13 @@ func Chmod(name string, mode os.FileMode) error {
 }
 
 // IsMainFile specifies if this is the main file or a secondary attached file (like ADS in case of windows)
-func IsMainFile(name string) bool {
+func IsMainFile(_ string) bool {
 	// no-op - In case of OS other than windows this is always true
 	return true
 }
 
 // SanitizeMainFileName will only keep the main file and remove the secondary file.
-func SanitizeMainFileName(str string) string {
+func SanitizeMainFileName(_ string) string {
 	// no-op - In case of non-windows there is no secondary file
 	return str
 }

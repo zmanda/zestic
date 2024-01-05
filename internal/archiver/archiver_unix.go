@@ -101,6 +101,6 @@ func (arch *Archiver) SaveDir(ctx context.Context, snPath string, dir string, fi
 }
 
 // processTargets is no-op for non-windows OS
-func (arch *Archiver) processTargets(target string, targetMain string, abstarget string, fiMain os.FileInfo) (fi os.FileInfo, shouldReturn bool, fn FutureNode, excluded bool, err error) {
+func (arch *Archiver) processTargets(_ string, _ string, _ string, fiMain os.FileInfo) (fi os.FileInfo, shouldReturn bool, fn FutureNode, excluded bool, err error) {
 	return fiMain, false, FutureNode{}, false, nil
 }
