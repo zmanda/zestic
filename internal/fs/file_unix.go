@@ -56,7 +56,7 @@ func IsMainFile(_ string) bool {
 }
 
 // SanitizeMainFileName will only keep the main file and remove the secondary file.
-func SanitizeMainFileName(_ string) string {
+func SanitizeMainFileName(str string) string {
 	// no-op - In case of non-windows there is no secondary file
 	return str
 }
