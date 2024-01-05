@@ -250,5 +250,8 @@ func getRandomInt() int64 {
 		panic(err)
 	}
 	n := nBig.Int64()
+	if n == 0 {
+		n = getRandomInt()
+	}
 	return n
 }
