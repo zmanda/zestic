@@ -710,18 +710,20 @@ func handleUnknownGenericAttributeFound(genericAttributeName string) {
 		// Print the unique error only once for a given execution
 		value, exists := genericAttributesForOS[genericAttributeName]
 
-		var msg string
 		if exists {
 			//If genericAttributesForOS contains an entry but we still got here, it means the specific node_xx.go for the current OS did not handle it and the repository may have been originally created on a different OS.
-			msg = fmt.Sprintf("WARNING: Found a GenericAttributeType in the repository: %s which may not be compatible with your OS. Compatible OS: %v", genericAttributeName, value)
+			//The fact the node.go knows about the attribute, means it is not a new attribute. This may be a common situation if a repo is used across OSs.
+			debug.Log("Ignoring a generic attribute found in the repository: %s which may not be compatible with your OS. Compatible OS: %v", genericAttributeName, value)
 		} else {
 			//If genericAttributesForOS in node.go does not know about this attribute, then the repository may have been created by a newer version which has a newer GenericAttributeType.
-			msg = fmt.Sprintf("WARNING: Found an unrecognized GenericAttributeType in the repository: %s. You may need to upgrade to latest version of restic.", genericAttributeName)
-			fmt.Fprintln(os.Stderr, msg)
+			msg := "WARNING: Found an unrecognized generic attribute in the repository: %s. You may need to upgrade to latest version of restic.%s"
+			_, err := fmt.Fprintf(os.Stderr, msg, genericAttributeName, "\n")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "unable to write to stderr: %v\n", err)
+			}
+			debug.Log(msg, genericAttributeName, "")
 		}
-		debug.Log(msg)
 	}
-
 }
 
 var unknownGenericAttributesHandlingHistory = map[string]string{}
