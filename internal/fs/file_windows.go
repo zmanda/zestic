@@ -87,6 +87,8 @@ func IsMainFile(name string) bool {
 
 // SanitizeMainFileName will only keep the main file and remove the secondary file like ADS from the name.
 func SanitizeMainFileName(str string) string {
-	// We need to prevent repeated entries coming from the ADS files when filtering.
+	// The ADS is essentially a part of the main file. So for any functionality that
+	// needs to consider the main file, like filtering, we need to derive the main file name
+	// from the ADS name.
 	return TrimAds(str)
 }
