@@ -77,3 +77,16 @@ func TempFile(dir, prefix string) (f *os.File, err error) {
 func Chmod(name string, mode os.FileMode) error {
 	return os.Chmod(fixpath(name), mode)
 }
+
+// IsMainFile specifies if this is the main file or a secondary attached file (like ADS in case of windows)
+// This is used for functionalities we want to skip for secondary (ads) files.
+// Eg. For Windows we do not want to count the secondary files
+func IsMainFile(name string) bool {
+	return !IsAds(name)
+}
+
+// SanitizeMainFileName will only keep the main file and remove the secondary file like ADS from the name.
+func SanitizeMainFileName(str string) string {
+	// We need to prevent repeated entries coming from the ADS files when filtering.
+	return TrimAds(str)
+}

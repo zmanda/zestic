@@ -5,7 +5,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"sort"
 	"time"
 
 	"github.com/restic/restic/internal/debug"
@@ -212,59 +211,6 @@ func (arch *Archiver) wrapLoadTreeError(id restic.ID, err error) error {
 	return err
 }
 
-// SaveDir stores a directory in the repo and returns the node. snPath is the
-// path within the current snapshot.
-func (arch *Archiver) SaveDir(ctx context.Context, snPath string, dir string, fi os.FileInfo, previous *restic.Tree, complete CompleteFunc) (d FutureNode, err error) {
-	debug.Log("%v %v", snPath, dir)
-
-	treeNode, err := arch.nodeFromFileInfo(snPath, dir, fi)
-	if err != nil {
-		return FutureNode{}, err
-	}
-
-	names, err := readdirnames(arch.FS, dir, fs.O_NOFOLLOW)
-	if err != nil {
-		return FutureNode{}, err
-	}
-	sort.Strings(names)
-
-	nodes := make([]FutureNode, 0, len(names))
-
-	for _, name := range names {
-		// test if context has been cancelled
-		if ctx.Err() != nil {
-			debug.Log("context has been cancelled, aborting")
-			return FutureNode{}, ctx.Err()
-		}
-
-		pathname := arch.FS.Join(dir, name)
-		oldNode := previous.Find(name)
-		snItem := join(snPath, name)
-		fn, excluded, err := arch.Save(ctx, snItem, pathname, oldNode)
-
-		// return error early if possible
-		if err != nil {
-			err = arch.error(pathname, err)
-			if err == nil {
-				// ignore error
-				continue
-			}
-
-			return FutureNode{}, err
-		}
-
-		if excluded {
-			continue
-		}
-
-		nodes = append(nodes, fn)
-	}
-
-	fn := arch.treeSaver.Save(ctx, snPath, dir, treeNode, nodes, complete)
-
-	return fn, nil
-}
-
 // FutureNode holds a reference to a channel that returns a FutureNodeResult
 // or a reference to an already existing result. If the result is available
 // immediately, then storing a reference directly requires less memory than
@@ -339,6 +285,11 @@ func (arch *Archiver) Save(ctx context.Context, snPath, target string, previous 
 	if err != nil {
 		return FutureNode{}, false, err
 	}
+	//In case of windows ADS files for checking include and excludes we use the main file which has the ADS files attached.
+	//For Unix, the main file is the same as there is no ADS. So targetMain is always the same as target.
+	//After checking the exclusion for actually processing the file, we use the full file name including ads portion if any.
+	targetMain := fs.SanitizeMainFileName(target)
+	abstargetMain := fs.SanitizeMainFileName(abstarget)
 
 	// exclude files by path before running Lstat to reduce number of lstat calls
 	if !arch.SelectByName(abstarget) {
@@ -347,7 +298,7 @@ func (arch *Archiver) Save(ctx context.Context, snPath, target string, previous 
 	}
 
 	// get file info and run remaining select functions that require file information
-	fi, err := arch.FS.Lstat(target)
+	fiMain, err := arch.FS.Lstat(targetMain)
 	if err != nil {
 		debug.Log("lstat() for %v returned error: %v", target, err)
 		err = arch.error(abstarget, err)
@@ -356,9 +307,14 @@ func (arch *Archiver) Save(ctx context.Context, snPath, target string, previous 
 		}
 		return FutureNode{}, true, nil
 	}
-	if !arch.Select(abstarget, fi) {
+	if !arch.Select(abstargetMain, fiMain) {
 		debug.Log("%v is excluded", target)
 		return FutureNode{}, true, nil
+	}
+	var fi os.FileInfo
+	fi, shouldReturn, fn, excluded, err := arch.processTargets(target, targetMain, abstarget, fiMain)
+	if shouldReturn {
+		return fn, excluded, err
 	}
 
 	switch {
@@ -641,36 +597,6 @@ func readdirnames(filesystem fs.FS, dir string, flags int) ([]string, error) {
 	}
 
 	return entries, nil
-}
-
-// resolveRelativeTargets replaces targets that only contain relative
-// directories ("." or "../../") with the contents of the directory. Each
-// element of target is processed with fs.Clean().
-func resolveRelativeTargets(filesys fs.FS, targets []string) ([]string, error) {
-	debug.Log("targets before resolving: %v", targets)
-	result := make([]string, 0, len(targets))
-	for _, target := range targets {
-		target = filesys.Clean(target)
-		pc, _ := pathComponents(filesys, target, false)
-		if len(pc) > 0 {
-			result = append(result, target)
-			continue
-		}
-
-		debug.Log("replacing %q with readdir(%q)", target, target)
-		entries, err := readdirnames(filesys, target, fs.O_NOFOLLOW)
-		if err != nil {
-			return nil, err
-		}
-		sort.Strings(entries)
-
-		for _, name := range entries {
-			result = append(result, filesys.Join(target, name))
-		}
-	}
-
-	debug.Log("targets after resolving: %v", result)
-	return result, nil
 }
 
 // SnapshotOptions collect attributes for a new snapshot.
