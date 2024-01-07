@@ -7,16 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/errors"
-)
-
-var (
-	once                     sync.Once
-	noBackupRestorePrivilege bool
 )
 
 // mknod is not supported on Windows.
@@ -207,15 +201,4 @@ func handleCreationTime(path string, data []byte) (err error) {
 		return err
 	}
 	return nil
-}
-
-// If there are no privileges for backup/restore of SecurityDescriptors, show a warning on Stderr.
-func handleNoSDBackupRestorePrivileges() {
-	noBackupRestorePrivilege = true
-	msg := "WARNING: No privileges for getting/setting file SecurityDescriptors. Run this process as an admin or with `SeBackupPrivilege`, `SeRestorePrivilege` and `SeSecurityPrivilege` for SecurityDescriptor backups/restores to succeed."
-	_, err := fmt.Fprintln(os.Stderr, msg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to write to stderr: %v\n", err)
-	}
-	debug.Log(msg)
 }

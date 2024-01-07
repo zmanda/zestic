@@ -100,7 +100,7 @@ func runGenericAttributesTestForNodes(expectedNodes []restic.Node, tempDir strin
 
 	for _, testNode := range expectedNodes {
 		testPath, genericAttrThroughNodeFromFileInfo := prepareGenericAttributesTestForNodes(tempDir, testNode, t, genericAttr)
-		test.Equals(t, genericAttributeExpected, genericAttrThroughNodeFromFileInfo, "Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(genericAttr), testPath)
+		test.Equalsf(t, genericAttributeExpected, genericAttrThroughNodeFromFileInfo, "Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(genericAttr), testPath)
 	}
 }
 
@@ -188,6 +188,6 @@ func TestNewGenericAttributeType(t *testing.T) {
 	for _, testNode := range expectedNodes {
 		testPath, genericAttrThroughNodeFromFileInfo := prepareGenericAttributesTestForNodes(tempDir, testNode, t, TypeSomeNewAttribute)
 		//Since this GenericAttribute is unknown to this version of the software, it will not get set on the file.
-		test.Equals(t, []byte(nil), genericAttrThroughNodeFromFileInfo, "Unknown Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(TypeSomeNewAttribute), testPath)
+		test.Equalsf(t, []byte(nil), genericAttrThroughNodeFromFileInfo, "Unknown Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(TypeSomeNewAttribute), testPath)
 	}
 }

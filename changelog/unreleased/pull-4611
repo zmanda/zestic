@@ -1,7 +1,7 @@
-Enhancement: Back up windows metadata like created ts and file attributes like hidden flag
+Enhancement: Back up windows created time and file attributes like hidden flag
 
-Restic did not back up windows-specific meta-data like created ts and file attributes like hidden flag.
-Restic now backs up file Created time and File Attributes like hidden flag when backing up files and folders on windows.
+Restic did not back up windows-specific meta-data like created time and file attributes like hidden flag.
+Restic now backs up file created time and file attributes like hidden flag when backing up files and folders on windows.
 
 https://github.com/restic/restic/pull/4611
 

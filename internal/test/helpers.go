@@ -3,6 +3,7 @@ package test
 import (
 	"compress/bzip2"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -48,9 +49,15 @@ func OKs(tb testing.TB, errs []error) {
 
 // Equals fails the test if exp is not equal to act.
 func Equals(tb testing.TB, exp, act interface{}) {
+	Equalsf(tb, exp, act, "")
+}
+
+// Equalsf fails the test if exp is not equal to act.
+// msg is optional message with arguments to be printed.
+func Equalsf(tb testing.TB, exp, act interface{}, msg string, args ...any) {
 	tb.Helper()
 	if !reflect.DeepEqual(exp, act) {
-		tb.Fatalf("\033[31m\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
+		tb.Fatalf("\033[31m\n\n\t"+fmt.Sprintf(msg, args...)+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
 	}
 }
 
