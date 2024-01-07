@@ -10,11 +10,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/restic/restic/internal/fs"
-
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/errors"
-	"golang.org/x/sys/windows"
 )
 
 var (
@@ -57,6 +54,22 @@ func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespe
 	return syscall.SetFileTime(h, nil, &a, &w)
 }
 
+// Getxattr retrieves extended attribute data associated with path.
+func Getxattr(path, name string) ([]byte, error) {
+	return nil, nil
+}
+
+// Listxattr retrieves a list of names of extended attributes associated with the
+// given path in the file system.
+func Listxattr(path string) ([]string, error) {
+	return nil, nil
+}
+
+// Setxattr associates name and data together as an attribute of path.
+func Setxattr(path, name string, data []byte) error {
+	return nil
+}
+
 type statT syscall.Win32FileAttributeData
 
 func toStatT(i interface{}) (*statT, bool) {
@@ -88,80 +101,7 @@ func (s statT) mtim() syscall.Timespec {
 
 func (s statT) ctim() syscall.Timespec {
 	// Windows does not have the concept of a "change time" in the sense Unix uses it, so we're using the LastWriteTime here.
-	return s.mtim()
-}
-
-// restore extended attributes for windows
-func (node Node) restoreExtendedAttributes(path string) (err error) {
-	eas := []fs.ExtendedAttribute{}
-	for _, attr := range node.ExtendedAttributes {
-		extr := new(fs.ExtendedAttribute)
-		extr.Name = attr.Name
-		extr.Value = attr.Value
-		eas = append(eas, *extr)
-	}
-	if len(eas) > 0 {
-		if errExt := restoreExtendedAttributes(node.Type, path, eas); errExt != nil {
-			return errExt
-		}
-	}
-	return nil
-}
-
-// fill extended attributes in the node. This also includes the Generic attributes for windows.
-func (node *Node) fillExtendedAttributes(path string) (err error) {
-	var fileHandle windows.Handle
-
-	//Get file handle for file or dir
-	if node.Type == "file" {
-		if strings.HasSuffix(filepath.Clean(path), `\`) {
-			return nil
-		}
-		utf16Path := windows.StringToUTF16Ptr(path)
-		fileAccessRightReadWriteEA := (0x8 | 0x10)
-		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
-	} else if node.Type == "dir" {
-		utf16Path := windows.StringToUTF16Ptr(path)
-		fileAccessRightReadWriteEA := (0x8 | 0x10)
-		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	} else {
-		return nil
-	}
-	if err != nil {
-		err = errors.Errorf("open file failed for path: %s, with: %v", path, err)
-		return err
-	}
-	defer func() {
-		err := windows.CloseHandle(fileHandle)
-		if err != nil {
-			debug.Log("Error closing file handle for %s: %v\n", path, err)
-		}
-	}()
-
-	//Get the windows Extended Attributes using the file handle
-	extAtts, err := fs.GetFileEA(fileHandle)
-	debug.Log("fillExtendedAttributes(%v) %v", path, extAtts)
-	if err != nil {
-		debug.Log("open file failed for path: %s : %v", path, err)
-		return err
-	} else if len(extAtts) == 0 {
-		return nil
-	}
-
-	//Fill the ExtendedAttributes in the node using the name/value pairs in the windows EA
-	for _, attr := range extAtts {
-		if err != nil {
-			err = errors.Errorf("can not obtain extended attribute for path %v, attr: %v, err: %v\n,", path, attr, err)
-			continue
-		}
-		extendedAttr := ExtendedAttribute{
-			Name:  attr.Name,
-			Value: attr.Value,
-		}
-
-		node.ExtendedAttributes = append(node.ExtendedAttributes, extendedAttr)
-	}
-	return nil
+	return syscall.NsecToTimespec(s.LastWriteTime.Nanoseconds())
 }
 
 // restoreGenericAttributes restores generic attributes for windows
@@ -188,14 +128,6 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 
 	//Add Creation Time
 	node.appendGenericAttribute(getCreationTime(fi, path))
-
-	if node.Type == "file" || node.Type == "dir" {
-		sd, err := getSecurityDescriptor(path)
-		if err == nil {
-			//Add Security Descriptor
-			node.appendGenericAttribute(sd)
-		}
-	}
 	return err
 }
 
@@ -225,58 +157,6 @@ func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Generic
 	return creationTimeAttribute
 }
 
-func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error) {
-	if noBackupRestorePrivilege {
-		//Shortcircuiting since it is already confirmed that there is no backup/restore privilege for SecurityDescriptors.
-		return sdAttribute, nil
-	}
-	sd, err := fs.GetFileSecurityDescriptor(path)
-	if err != nil {
-		if errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {
-			once.Do(handleNoSDBackupRestorePrivileges)
-		} else {
-			//If backup privilege was already enabled, then this is not an initialization issue as admin permission would be needed for this step.
-			//This is a specific error, logging it in debug for now.
-			err = fmt.Errorf("Error getting file SecurityDescriptor for: %s : %v", path, err)
-			debug.Log("%v", err)
-			return sdAttribute, err
-		}
-	} else if sd != "" {
-		sdAttribute = NewGenericAttribute(TypeSecurityDescriptor, []byte(sd))
-	}
-	return sdAttribute, nil
-}
-
-// restoreExtendedAttributes handles restore of the Windows Extended Attributes to the specified path.
-// The windows api requires setting of all the extended attributes in one call.
-func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute) (err error) {
-	var fileHandle windows.Handle
-	switch nodeType {
-	case "file":
-		utf16Path := windows.StringToUTF16Ptr(path)
-		fileAccessRightReadWriteEA := (0x8 | 0x10)
-		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
-	case "dir":
-		utf16Path := windows.StringToUTF16Ptr(path)
-		fileAccessRightReadWriteEA := (0x8 | 0x10)
-		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	default:
-		return nil
-	}
-	defer func() {
-		err := windows.CloseHandle(fileHandle)
-		if err != nil {
-			debug.Log("Error closing file handle for %s: %v\n", path, err)
-		}
-	}()
-	if err != nil {
-		err = errors.Errorf("open file failed for path %v, with: %v:\n", path, err)
-	} else if err = fs.SetFileEA(fileHandle, eas); err != nil {
-		err = errors.Errorf("set EA failed for path %v, with: %v:\n", path, err)
-	}
-	return err
-}
-
 // restoreGenericAttribute restores the generic attributes for windows like File Attributes,
 // Created time and Security Descriptors.
 func (attr GenericAttribute) restoreGenericAttribute(path string) error {
@@ -285,8 +165,6 @@ func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 		return handleFileAttributes(path, attr.Value)
 	case string(TypeCreationTime):
 		return handleCreationTime(path, attr.Value)
-	case string(TypeSecurityDescriptor):
-		return handleSecurityDescriptor(path, attr.Value)
 	}
 	handleUnknownGenericAttributeFound(attr.Name)
 	return nil
@@ -326,23 +204,6 @@ func handleCreationTime(path string, data []byte) (err error) {
 	creationTime.LowDateTime = binary.LittleEndian.Uint32(data[0:4])
 	creationTime.HighDateTime = binary.LittleEndian.Uint32(data[4:8])
 	if err := syscall.SetFileTime(handle, &creationTime, nil, nil); err != nil {
-		return err
-	}
-	return nil
-}
-
-func handleSecurityDescriptor(path string, data []byte) error {
-	if noBackupRestorePrivilege {
-		// Shortcircuiting since it is already confirmed that there is no backup/restore
-		// privilege for SecurityDescriptors.
-		return nil
-	}
-	sd := string(data)
-
-	if err := fs.SetFileSecurityDescriptor(path, sd); err != nil {
-		if errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {
-			once.Do(handleNoSDBackupRestorePrivileges)
-		}
 		return err
 	}
 	return nil

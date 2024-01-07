@@ -486,7 +486,8 @@ particular note are::
 
   - file creation date on Unix platforms
   - inode flags on Unix platforms
-
+  - file ownership and ACLs on Windows
+  
 
 Reading data from a command
 ***************************

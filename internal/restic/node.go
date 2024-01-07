@@ -50,8 +50,6 @@ const (
 	TypeFileAttribute GenericAttributeType = "WinFileAttrib"
 	// TypeCreationTime is the GenericAttributeType used for storing creation time within the generic attributes map.
 	TypeCreationTime GenericAttributeType = "WinCreationTime"
-	// TypeSecurityDescriptor is the GenericAttributeType used for storing security descriptor for windows within the generic attributes map.
-	TypeSecurityDescriptor GenericAttributeType = "WinSecurityDesc"
 
 	//Generic Attributes for other OS types should be defined here.
 )
@@ -59,9 +57,8 @@ const (
 // When you create new GenericAttributeTypes for any OS, add an entry in this map.
 var genericAttributesForOS = map[string][]OSType{
 	//value is an array as some generic attributes may be handled in multiple OSs.
-	string(TypeFileAttribute):      {WindowsOS},
-	string(TypeCreationTime):       {WindowsOS},
-	string(TypeSecurityDescriptor): {WindowsOS},
+	string(TypeFileAttribute): {WindowsOS},
+	string(TypeCreationTime):  {WindowsOS},
 }
 
 // Node is a file, directory or other item in a backup.
@@ -292,6 +289,16 @@ func (node Node) restoreMetadata(path string) error {
 	}
 
 	return firsterr
+}
+
+func (node Node) restoreExtendedAttributes(path string) error {
+	for _, attr := range node.ExtendedAttributes {
+		err := Setxattr(path, attr.Name, attr.Value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (node Node) RestoreTimestamps(path string) error {
@@ -691,6 +698,31 @@ func (node *Node) fillExtra(path string, fi os.FileInfo) error {
 		debug.Log("Error filling generic attributes for %v at %v : %v", node.Name, path, errGen)
 	}
 	return err
+}
+
+func (node *Node) fillExtendedAttributes(path string) error {
+	xattrs, err := Listxattr(path)
+	debug.Log("fillExtendedAttributes(%v) %v %v", path, xattrs, err)
+	if err != nil {
+		return err
+	}
+
+	node.ExtendedAttributes = make([]ExtendedAttribute, 0, len(xattrs))
+	for _, attr := range xattrs {
+		attrVal, err := Getxattr(path, attr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "can not obtain extended attribute %v for %v:\n", attr, path)
+			continue
+		}
+		attr := ExtendedAttribute{
+			Name:  attr,
+			Value: attrVal,
+		}
+
+		node.ExtendedAttributes = append(node.ExtendedAttributes, attr)
+	}
+
+	return nil
 }
 
 func mkfifo(path string, mode uint32) (err error) {

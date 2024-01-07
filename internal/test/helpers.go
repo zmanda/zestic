@@ -3,7 +3,6 @@ package test
 import (
 	"compress/bzip2"
 	"compress/gzip"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -48,22 +47,10 @@ func OKs(tb testing.TB, errs []error) {
 }
 
 // Equals fails the test if exp is not equal to act.
-// msg is optional message to be printed, first param being format string and rest being arguments.
-func Equals(tb testing.TB, exp, act interface{}, msgs ...string) {
+func Equals(tb testing.TB, exp, act interface{}) {
 	tb.Helper()
 	if !reflect.DeepEqual(exp, act) {
-		var msgString string
-		length := len(msgs)
-		if length == 1 {
-			msgString = msgs[0]
-		} else if length > 1 {
-			args := make([]interface{}, length-1)
-			for i, msg := range msgs[1:] {
-				args[i] = msg
-			}
-			msgString = fmt.Sprintf(msgs[0], args...)
-		}
-		tb.Fatalf("\033[31m\n\n\t"+msgString+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
+		tb.Fatalf("\033[31m\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
 	}
 }
 
