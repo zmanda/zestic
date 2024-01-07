@@ -618,7 +618,7 @@ func resolveRelativeTargets(filesys fs.FS, targets []string) ([]string, error) {
 	result := make([]string, 0, len(targets))
 	preProcessTargets(filesys, &targets)
 	for _, target := range targets {
-		target = processTarget(target)
+		target = processTarget(filesys, target)
 		pc, _ := pathComponents(filesys, target, false)
 		if len(pc) > 0 {
 			result = append(result, target)

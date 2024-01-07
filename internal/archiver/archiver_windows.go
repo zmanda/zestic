@@ -29,7 +29,7 @@ func preProcessTargets(filesys fs.FS, targets *[]string) {
 // processTarget processes each target in the loop.
 // In case of windows the Clean up of target is already done
 // in preProcessTargets before the loop, hence this is no-op.
-func processTarget(target string) string {
+func processTarget(filesys fs.FS, target string) string {
 	return target
 }
 

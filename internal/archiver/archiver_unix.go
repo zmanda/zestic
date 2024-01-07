@@ -22,8 +22,9 @@ func preProcessTargets(filesys fs.FS, targets *[]string) {
 	// no-op
 }
 
-// processTarget process each target in the loop.
-func processTarget(target string) string {
+// processTarget processes each target in the loop.
+// It uses the passed filesys to clean the target.
+func processTarget(filesys fs.FS, target string) string {
 	return filesys.Clean(target)
 }
 
