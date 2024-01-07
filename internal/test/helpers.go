@@ -53,23 +53,17 @@ func Equals(tb testing.TB, exp, act interface{}, msgs ...string) {
 	tb.Helper()
 	if !reflect.DeepEqual(exp, act) {
 		var msgString string
-		if len(msgs) == 0 {
-			tb.Fatalf("\033[31m\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
-		} else if len(msgs) == 1 {
-			tb.Fatalf("\033[31m\n\n\t"+msgs[0]+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
-		} else {
-			args := make([]interface{}, len(msgs)-1)
-			firstRun := true
-			for i, s := range msgs {
-				if firstRun {
-					firstRun = false
-					continue
-				}
-				args[i-1] = s
+		length := len(msgs)
+		if length == 1 {
+			msgString = msgs[0]
+		} else if length > 1 {
+			args := make([]interface{}, length-1)
+			for i, msg := range msgs[1:] {
+				args[i] = msg
 			}
 			msgString = fmt.Sprintf(msgs[0], args...)
-			tb.Fatalf("\033[31m\n\n\t"+msgString+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
 		}
+		tb.Fatalf("\033[31m\n\n\t"+msgString+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", exp, act)
 	}
 }
 
