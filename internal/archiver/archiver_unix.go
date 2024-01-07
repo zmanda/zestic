@@ -18,7 +18,7 @@ import (
 // It is a no-op on linux as we do not need to do an
 // extra iteration on the targets before the loop.
 // We process each target inside the loop.
-func preProcessTargets(filesys fs.FS, targets *[]string) {
+func preProcessTargets(_ fs.FS, _ *[]string) {
 	// no-op
 }
 
