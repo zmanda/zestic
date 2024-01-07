@@ -222,6 +222,61 @@ func (arch *Archiver) wrapLoadTreeError(id restic.ID, err error) error {
 	return err
 }
 
+// SaveDir stores a directory in the repo and returns the node. snPath is the
+// path within the current snapshot.
+func (arch *Archiver) SaveDir(ctx context.Context, snPath string, dir string, fi os.FileInfo, previous *restic.Tree, complete CompleteFunc) (d FutureNode, err error) {
+	debug.Log("%v %v", snPath, dir)
+
+	treeNode, err := arch.nodeFromFileInfo(snPath, dir, fi)
+	if err != nil {
+		return FutureNode{}, err
+	}
+
+	names, err := readdirnames(arch.FS, dir, fs.O_NOFOLLOW)
+	if err != nil {
+		return FutureNode{}, err
+	}
+	pathnames := arch.preProcessPaths(dir, names)
+	sort.Strings(pathnames)
+
+	nodes := make([]FutureNode, 0, len(pathnames))
+
+	for _, pathname := range pathnames {
+		// test if context has been cancelled
+		if ctx.Err() != nil {
+			debug.Log("context has been cancelled, aborting")
+			return FutureNode{}, ctx.Err()
+		}
+		name := getNameFromPathname(pathname)
+		pathname := arch.processPath(dir, pathname)
+
+		oldNode := previous.Find(name)
+		snItem := join(snPath, name)
+		fn, excluded, err := arch.Save(ctx, snItem, pathname, oldNode)
+
+		// return error early if possible
+		if err != nil {
+			err = arch.error(pathname, err)
+			if err == nil {
+				// ignore error
+				continue
+			}
+
+			return FutureNode{}, errors.Wrap(err, "error saving a target (file or directory)")
+		}
+
+		if excluded {
+			continue
+		}
+
+		nodes = append(nodes, fn)
+	}
+
+	fn := arch.treeSaver.Save(ctx, snPath, dir, treeNode, nodes, complete)
+
+	return fn, nil
+}
+
 // FutureNode holds a reference to a channel that returns a FutureNodeResult
 // or a reference to an already existing result. If the result is available
 // immediately, then storing a reference directly requires less memory than
