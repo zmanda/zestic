@@ -12,47 +12,25 @@ import (
 	"github.com/restic/restic/internal/restic"
 )
 
-// resolveRelativeTargets replaces targets that only contain relative
-// directories ("." or "../../") with the contents of the directory. Each
-// element of target is processed with fs.Clean().
-// For Windows it also adds ads stream for each target to the targets
+// preProcessTargets performs preprocessing of the targets before the loop.
+// For Windows, it cleans each target and it also adds ads stream for each
+// target to the targets array.
 // We read the ADS from each file and add them as independent Nodes with
 // the full ADS name as the name of the file.
 // During restore the ADS files are restored using the ADS name and that
 // automatically attaches them as ADS to the main file.
-func resolveRelativeTargets(filesys fs.FS, targets []string) ([]string, error) {
-	debug.Log("targets before resolving: %v", targets)
-	result := make([]string, 0, len(targets))
-	preProcessTargets(filesys, &targets)
-	for _, target := range targets {
-		pc, _ := pathComponents(filesys, target, false)
-		if len(pc) > 0 {
-			result = append(result, target)
-			continue
-		}
-
-		debug.Log("replacing %q with readdir(%q)", target, target)
-		entries, err := readdirnames(filesys, target, fs.O_NOFOLLOW)
-		if err != nil {
-			return nil, err
-		}
-		sort.Strings(entries)
-
-		for _, name := range entries {
-			result = append(result, filesys.Join(target, name))
-		}
-	}
-
-	debug.Log("targets after resolving: %v", result)
-	return result, nil
-}
-
-// preProcessTargets cleans the targets and adds the ads streams from each target to the targets
 func preProcessTargets(filesys fs.FS, targets *[]string) {
 	for _, target := range *targets {
 		target = filesys.Clean(target)
 		addADSStreams(target, targets)
 	}
+}
+
+// processTarget processes each target in the loop.
+// In case of windows the Clean up of target is already done
+// in preProcessTargets before the loop, hence this is no-op.
+func processTarget(target string) string {
+	return target
 }
 
 // SaveDir stores a directory in the repo and returns the node. snPath is the

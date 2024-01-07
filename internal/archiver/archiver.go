@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -607,6 +608,37 @@ func readdirnames(filesystem fs.FS, dir string, flags int) ([]string, error) {
 	}
 
 	return entries, nil
+}
+
+// resolveRelativeTargets replaces targets that only contain relative
+// directories ("." or "../../") with the contents of the directory. Each
+// element of target is processed with fs.Clean().
+func resolveRelativeTargets(filesys fs.FS, targets []string) ([]string, error) {
+	debug.Log("targets before resolving: %v", targets)
+	result := make([]string, 0, len(targets))
+	preProcessTargets(filesys, &targets)
+	for _, target := range targets {
+		target = processTarget(target)
+		pc, _ := pathComponents(filesys, target, false)
+		if len(pc) > 0 {
+			result = append(result, target)
+			continue
+		}
+
+		debug.Log("replacing %q with readdir(%q)", target, target)
+		entries, err := readdirnames(filesys, target, fs.O_NOFOLLOW)
+		if err != nil {
+			return nil, err
+		}
+		sort.Strings(entries)
+
+		for _, name := range entries {
+			result = append(result, filesys.Join(target, name))
+		}
+	}
+
+	debug.Log("targets after resolving: %v", result)
+	return result, nil
 }
 
 // SnapshotOptions collect attributes for a new snapshot.

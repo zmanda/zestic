@@ -14,34 +14,17 @@ import (
 	"github.com/restic/restic/internal/restic"
 )
 
-// resolveRelativeTargets replaces targets that only contain relative
-// directories ("." or "../../") with the contents of the directory. Each
-// element of target is processed with fs.Clean().
-func resolveRelativeTargets(filesys fs.FS, targets []string) ([]string, error) {
-	debug.Log("targets before resolving: %v", targets)
-	result := make([]string, 0, len(targets))
-	for _, target := range targets {
-		target = filesys.Clean(target)
-		pc, _ := pathComponents(filesys, target, false)
-		if len(pc) > 0 {
-			result = append(result, target)
-			continue
-		}
+// preProcessTargets performs preprocessing of the targets before the loop.
+// It is a no-op on linux as we do not need to do an
+// extra iteration on the targets before the loop.
+// We process each target inside the loop.
+func preProcessTargets(filesys fs.FS, targets *[]string) {
+	// no-op
+}
 
-		debug.Log("replacing %q with readdir(%q)", target, target)
-		entries, err := readdirnames(filesys, target, fs.O_NOFOLLOW)
-		if err != nil {
-			return nil, err
-		}
-		sort.Strings(entries)
-
-		for _, name := range entries {
-			result = append(result, filesys.Join(target, name))
-		}
-	}
-
-	debug.Log("targets after resolving: %v", result)
-	return result, nil
+// processTarget process each target in the loop.
+func processTarget(target string) string {
+	return filesys.Clean(target)
 }
 
 // SaveDir stores a directory in the repo and returns the node. snPath is the
