@@ -7,19 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/restic/restic/internal/fs"
 
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/errors"
-	"golang.org/x/sys/windows"
-)
-
-var (
-	once                     sync.Once
-	noBackupRestorePrivilege bool
 )
 
 // mknod is not supported on Windows.
@@ -169,21 +162,13 @@ func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Generic
 }
 
 func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error) {
-	if noBackupRestorePrivilege {
-		//Shortcircuiting since it is already confirmed that there is no backup/restore privilege for SecurityDescriptors.
-		return sdAttribute, nil
-	}
 	sd, err := fs.GetFileSecurityDescriptor(path)
 	if err != nil {
-		if errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {
-			once.Do(handleNoSDBackupRestorePrivileges)
-		} else {
-			//If backup privilege was already enabled, then this is not an initialization issue as admin permission would be needed for this step.
-			//This is a specific error, logging it in debug for now.
-			err = fmt.Errorf("Error getting file SecurityDescriptor for: %s : %v", path, err)
-			debug.Log("%v", err)
-			return sdAttribute, err
-		}
+		//If backup privilege was already enabled, then this is not an initialization issue as admin permission would be needed for this step.
+		//This is a specific error, logging it in debug for now.
+		err = fmt.Errorf("Error getting file SecurityDescriptor for: %s : %v", path, err)
+		debug.Log("%v", err)
+		return sdAttribute, err
 	} else if sd != "" {
 		sdAttribute = NewGenericAttribute(TypeSecurityDescriptor, []byte(sd))
 	}
@@ -245,29 +230,8 @@ func handleCreationTime(path string, data []byte) (err error) {
 }
 
 func handleSecurityDescriptor(path string, data []byte) error {
-	if noBackupRestorePrivilege {
-		// Shortcircuiting since it is already confirmed that there is no backup/restore
-		// privilege for SecurityDescriptors.
-		return nil
-	}
 	sd := string(data)
 
-	if err := fs.SetFileSecurityDescriptor(path, sd); err != nil {
-		if errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {
-			once.Do(handleNoSDBackupRestorePrivileges)
-		}
-		return err
-	}
-	return nil
-}
-
-// If there are no privileges for backup/restore of SecurityDescriptors, show a warning on Stderr.
-func handleNoSDBackupRestorePrivileges() {
-	noBackupRestorePrivilege = true
-	msg := "WARNING: No privileges for getting/setting file SecurityDescriptors. Run this process as an admin or with `SeBackupPrivilege`, `SeRestorePrivilege` and `SeSecurityPrivilege` for SecurityDescriptor backups/restores to succeed."
-	_, err := fmt.Fprintln(os.Stderr, msg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to write to stderr: %v\n", err)
-	}
-	debug.Log(msg)
+	err := fs.SetFileSecurityDescriptor(path, sd)
+	return err
 }
