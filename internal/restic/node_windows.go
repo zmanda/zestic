@@ -16,6 +16,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const AdsSeparator = "|"
+
 // mknod is not supported on Windows.
 func mknod(_ string, mode uint32, dev uint64) (err error) {
 	return errors.New("device nodes cannot be created on windows")
@@ -199,6 +201,18 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 	//Add Creation Time
 	node.appendGenericAttribute(getCreationTime(fi, path))
 
+	//Add Has Ads
+	hasAds, hasAdsAttribute := getHasAds(path)
+	if hasAds {
+		node.appendGenericAttribute(hasAdsAttribute)
+	}
+
+	//Add Is Ads
+	isAds, isAdsAttribute := getIsAds(path)
+	if isAds {
+		node.appendGenericAttribute(isAdsAttribute)
+	}
+
 	if node.Type == "file" || node.Type == "dir" {
 		sd, err := getSecurityDescriptor(path)
 		if err == nil {
@@ -206,6 +220,7 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 			node.appendGenericAttribute(sd)
 		}
 	}
+
 	return err
 }
 
@@ -247,6 +262,24 @@ func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error
 		sdAttribute = NewGenericAttribute(TypeSecurityDescriptor, []byte(sd))
 	}
 	return sdAttribute, nil
+}
+
+func getHasAds(path string) (hasAds bool, hasAdsAttribute GenericAttribute) {
+	s, names, err := fs.GetADStreamNames(path)
+	if s {
+		hasAdsAttribute = NewGenericAttribute(TypeHasADS, []byte(strings.Join(names, AdsSeparator)))
+	} else if err != nil {
+		debug.Log("Could not fetch ads information for %v %v.", path, err)
+	}
+	return s, hasAdsAttribute
+}
+
+func getIsAds(path string) (IsAds bool, isAdsAttribute GenericAttribute) {
+	isAds := fs.IsAds(path)
+	if isAds {
+		isAdsAttribute = NewGenericAttribute(TypeIsADS, []byte(fs.TrimAds(path)))
+	}
+	return isAds, isAdsAttribute
 }
 
 // restoreExtendedAttributes handles restore of the Windows Extended Attributes to the specified path.

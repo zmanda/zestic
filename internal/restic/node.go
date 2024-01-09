@@ -52,6 +52,12 @@ const (
 	TypeCreationTime GenericAttributeType = "WinCreationTime"
 	// TypeSecurityDescriptor is the GenericAttributeType used for storing security descriptor for windows within the generic attributes map.
 	TypeSecurityDescriptor GenericAttributeType = "WinSecurityDesc"
+	// TypeHasADS is the GenericAttributeType used for to indicate that a file has Alternate Data Streams attached to it.
+	// The value will have a | separate list of the ADS attached to the file. Those files will have a generic attribute TypeIsADS.
+	TypeHasADS GenericAttributeType = "WinHasADS"
+	// TypeIsADS is the GenericAttributeType used for to indicate that a file represents an Alternate Data Streams and is attached to (child of) a file in the value.
+	// The file in the value will be a file which has a generic attribute TypeHasADS.
+	TypeIsADS GenericAttributeType = "WinIsADS"
 
 	//Generic Attributes for other OS types should be defined here.
 )
@@ -62,6 +68,8 @@ var genericAttributesForOS = map[string][]OSType{
 	string(TypeFileAttribute):      {WindowsOS},
 	string(TypeCreationTime):       {WindowsOS},
 	string(TypeSecurityDescriptor): {WindowsOS},
+	string(TypeHasADS):             {WindowsOS},
+	string(TypeIsADS):              {WindowsOS},
 }
 
 // Node is a file, directory or other item in a backup.

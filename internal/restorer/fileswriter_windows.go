@@ -13,10 +13,9 @@ func (*filesWriter) OpenFile(createSize int64, path string) (*os.File, error) {
 	var flags int
 	var f *os.File
 	var err error
-	// TODO optimize this. When GenericAttribute change is merged, we can
-	// leverage that here. If a file has ADS, we will have a GenericAttribute of
-	// type TypeADS added in the file with values as a string of ads stream names
-	// and we will do the following only if the TypeADS attribute is found in the node.
+	// If a file has ADS, we will have a GenericAttribute of
+	// type TypeHasADS added in the file with values as a string of ads stream names
+	// and we will do the following only if the TypeHasADS attribute is found in the node.
 	// Otherwise we will directly just use the create option while opening the file.
 	if createSize >= 0 {
 		flags = os.O_TRUNC | os.O_WRONLY
