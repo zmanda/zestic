@@ -34,8 +34,10 @@ func GetFileSecurityDescriptor(filePath string) (securityDescriptor string, err 
 		if isHandlePrivilegeNotHeldError(err) {
 			lowerPrivileges = true
 			sd, err = getNamedSecurityInfoLow(sd, err, filePath)
-		}
-		if err != nil {
+			if err != nil {
+				return "", fmt.Errorf("get low-level named security info failed with: %w", err)
+			}
+		} else {
 			return "", fmt.Errorf("get named security info failed with: %w", err)
 		}
 	}
@@ -103,8 +105,10 @@ func SetFileSecurityDescriptor(filePath string, securityDescriptor string) error
 		if isHandlePrivilegeNotHeldError(err) {
 			lowerPrivileges = true
 			err = setNamedSecurityInfoLow(filePath, dacl)
-		}
-		if err != nil {
+			if err != nil {
+				return fmt.Errorf("set low-level named security info failed with: %w", err)
+			}
+		} else {
 			return fmt.Errorf("set named security info failed with: %w", err)
 		}
 	}
