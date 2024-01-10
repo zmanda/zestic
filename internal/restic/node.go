@@ -588,12 +588,12 @@ func (node Node) sameExtendedAttributes(other Node) bool {
 func (node Node) sameGenericAttributes(other Node) bool {
 	// Converting the array of GenericAttributes to an array of Attribute
 	var attributes []Attribute
-	for _, ea := range node.GenericAttributes {
-		attributes = append(attributes, &ea)
+	for _, ga := range node.GenericAttributes {
+		attributes = append(attributes, &ga)
 	}
 	var otherAttributes []Attribute
-	for _, ea := range other.GenericAttributes {
-		otherAttributes = append(otherAttributes, &ea)
+	for _, ga := range other.GenericAttributes {
+		otherAttributes = append(otherAttributes, &ga)
 	}
 	return sameAttributes(attributes, otherAttributes)
 }
