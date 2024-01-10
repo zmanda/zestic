@@ -193,11 +193,17 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 		// Also do not allow processing of extended attributes for ADS.
 		return false, nil
 	}
-	// Add File Attributes
-	node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
+	if !strings.HasSuffix(filepath.Clean(path), `\`) {
+		// Do not process file attributes and created time for windows directories like
+		// C:, D:
+		// Filepath.Clean(path) ends with '\' for Windows root drives only.
 
-	//Add Creation Time
-	node.appendGenericAttribute(getCreationTime(fi, path))
+		// Add File Attributes
+		node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
+
+		//Add Creation Time
+		node.appendGenericAttribute(getCreationTime(fi, path))
+	}
 
 	if node.Type == "file" || node.Type == "dir" {
 		sd, err := getSecurityDescriptor(path)
