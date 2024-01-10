@@ -111,18 +111,19 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 
 // fillGenericAttributes fills in the generic attributes for windows like FileAttributes,
 // Created time and SecurityDescriptor.
-func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (err error) {
+func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
 	if strings.Contains(filepath.Base(path), ":") || strings.HasSuffix(filepath.Clean(path), `\`) {
 		//Do not process for windows directories like C:, D: and for Alternate Data Streams in Windows
 		//Filepath.Clean(path) ends with '\' for Windows root drives only.
-		return nil
+		// Also do not allow to process extended attributes.
+		return false, nil
 	}
 	// Add File Attributes
 	node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
 
 	//Add Creation Time
 	node.appendGenericAttribute(getCreationTime(fi, path))
-	return err
+	return true, err
 }
 
 func (node *Node) appendGenericAttribute(genericAttribute GenericAttribute) {
