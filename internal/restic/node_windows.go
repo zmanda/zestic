@@ -124,7 +124,7 @@ func (node Node) restoreExtendedAttributes(path string) (err error) {
 func (node *Node) fillExtendedAttributes(path string) (err error) {
 	var fileHandle windows.Handle
 
-	//Get file handle for file or dir
+	// Get file handle for file or dir
 	if node.Type == "file" {
 		if strings.HasSuffix(filepath.Clean(path), `\`) {
 			return nil
