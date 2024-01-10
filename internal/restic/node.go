@@ -579,7 +579,7 @@ func (node Node) sameExtendedAttributes(other Node) bool {
 		attributes = append(attributes, &ea)
 	}
 	var otherAttributes []Attribute
-	for _, ea := range node.ExtendedAttributes {
+	for _, ea := range other.ExtendedAttributes {
 		otherAttributes = append(otherAttributes, &ea)
 	}
 	return sameAttributes(attributes, otherAttributes)
@@ -592,7 +592,7 @@ func (node Node) sameGenericAttributes(other Node) bool {
 		attributes = append(attributes, &ea)
 	}
 	var otherAttributes []Attribute
-	for _, ea := range node.GenericAttributes {
+	for _, ea := range other.GenericAttributes {
 		otherAttributes = append(otherAttributes, &ea)
 	}
 	return sameAttributes(attributes, otherAttributes)
