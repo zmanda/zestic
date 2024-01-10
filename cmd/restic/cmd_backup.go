@@ -21,6 +21,7 @@ import (
 	"github.com/restic/restic/internal/archiver"
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/errors"
+	"github.com/restic/restic/internal/filter"
 	"github.com/restic/restic/internal/fs"
 	"github.com/restic/restic/internal/repository"
 	"github.com/restic/restic/internal/restic"
@@ -95,6 +96,8 @@ type BackupOptions struct {
 	ExcludeIfPresent  []string
 	ExcludeCaches     bool
 	ExcludeLargerThan string
+	Includes          []string
+	Removes           []string
 	Stdin             bool
 	StdinFilename     string
 	StdinCommand      bool
@@ -133,6 +136,8 @@ func init() {
 	f.StringArrayVar(&backupOptions.ExcludeIfPresent, "exclude-if-present", nil, "takes `filename[:header]`, exclude contents of directories containing filename (except filename itself) if header of that file is as provided (can be specified multiple times)")
 	f.BoolVar(&backupOptions.ExcludeCaches, "exclude-caches", false, `excludes cache directories that are marked with a CACHEDIR.TAG file. See https://bford.info/cachedir/ for the Cache Directory Tagging Standard`)
 	f.StringVar(&backupOptions.ExcludeLargerThan, "exclude-larger-than", "", "max `size` of the files to be backed up (allowed suffixes: k/K, m/M, g/G, t/T)")
+	f.StringArrayVarP(&backupOptions.Includes, "include", "i", nil, "include a `pattern` for folders/files to be scanned for the backup. This prevents a full scan and directly chooses files and folders specified in --include.")
+	f.StringArrayVar(&backupOptions.Removes, "remove", nil, "include a `pattern` for folders/files (backupsets) to be removed from the backups though they are still present on the file system. For removing inner files/folder use --exclude instead.")
 	f.BoolVar(&backupOptions.Stdin, "stdin", false, "read backup from stdin")
 	f.StringVar(&backupOptions.StdinFilename, "stdin-filename", "stdin", "`filename` to use when reading from stdin")
 	f.BoolVar(&backupOptions.StdinCommand, "stdin-from-command", false, "execute command and store its stdout")
@@ -165,15 +170,18 @@ func init() {
 
 // filterExisting returns a slice of all existing items, or an error if no
 // items exist at all.
-func filterExisting(items []string) (result []string, err error) {
+func filterExisting(items []string, removes []string) (result []string, err error) {
 	for _, item := range items {
-		_, err := fs.Lstat(item)
-		if errors.Is(err, os.ErrNotExist) {
-			Warnf("%v does not exist, skipping\n", item)
-			continue
-		}
+		//This is where we are ensuring backupsets are removed when specified with --remove flag
+		if !fs.IsPathRemoved(removes, item) {
+			_, err := fs.Lstat(item)
+			if errors.Is(err, os.ErrNotExist) {
+				Warnf("%v does not exist, skipping\n", item)
+				continue
+			}
 
-		result = append(result, item)
+			result = append(result, item)
+		}
 	}
 
 	if len(result) == 0 {
@@ -286,6 +294,16 @@ func (opts BackupOptions) Check(gopts GlobalOptions, args []string) error {
 			if filename == "-" {
 				return errors.Fatal("unable to read password from stdin when data is to be read from stdin, use --password-file or $RESTIC_PASSWORD")
 			}
+		}
+	}
+	if len(opts.Includes) > 0 {
+		if err := filter.ValidatePatterns(opts.Includes); err != nil {
+			return errors.Fatalf("--include: %s", err)
+		}
+	}
+	if len(opts.Removes) > 0 {
+		if err := filter.ValidatePatterns(opts.Removes); err != nil {
+			return errors.Fatalf("--remove: %s", err)
 		}
 	}
 
@@ -425,7 +443,7 @@ func collectTargets(opts BackupOptions, args []string) (targets []string, err er
 		return nil, errors.Fatal("nothing to backup, please specify target files/dirs")
 	}
 
-	targets, err = filterExisting(targets)
+	targets, err = filterExisting(targets, opts.Removes)
 	if err != nil {
 		return nil, err
 	}
@@ -620,6 +638,16 @@ func runBackup(ctx context.Context, opts BackupOptions, gopts GlobalOptions, ter
 	cancelCtx, cancel := context.WithCancel(wgCtx)
 	defer cancel()
 
+	snapshotOpts := archiver.SnapshotOptions{
+		Excludes:       opts.Excludes,
+		Includes:       opts.Includes,
+		Tags:           opts.Tags.Flatten(),
+		Time:           timeStamp,
+		Hostname:       opts.Host,
+		ParentSnapshot: parentSnapshot,
+		ProgramVersion: "restic " + version,
+	}
+
 	if !opts.NoScan {
 		sc := archiver.NewScanner(targetFS)
 		sc.SelectByName = selectByNameFilter
@@ -630,7 +658,8 @@ func runBackup(ctx context.Context, opts BackupOptions, gopts GlobalOptions, ter
 		if !gopts.JSON {
 			progressPrinter.V("start scan on %v", targets)
 		}
-		wg.Go(func() error { return sc.Scan(cancelCtx, targets) })
+
+		wg.Go(func() error { return sc.Scan(cancelCtx, targets, snapshotOpts) })
 	}
 
 	arch := archiver.New(repo, targetFS, archiver.Options{ReadConcurrency: backupOptions.ReadConcurrency})
@@ -659,15 +688,6 @@ func runBackup(ctx context.Context, opts BackupOptions, gopts GlobalOptions, ter
 	}
 	if opts.IgnoreCtime {
 		arch.ChangeIgnoreFlags |= archiver.ChangeIgnoreCtime
-	}
-
-	snapshotOpts := archiver.SnapshotOptions{
-		Excludes:       opts.Excludes,
-		Tags:           opts.Tags.Flatten(),
-		Time:           timeStamp,
-		Hostname:       opts.Host,
-		ParentSnapshot: parentSnapshot,
-		ProgramVersion: "restic " + version,
 	}
 
 	if !gopts.JSON {

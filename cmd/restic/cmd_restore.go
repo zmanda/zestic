@@ -235,7 +235,7 @@ func runRestore(ctx context.Context, opts RestoreOptions, gopts GlobalOptions,
 
 		matchedInsensitive, childMayMatchInsensitive, err := filter.ListWithChild(insensitiveIncludePatterns, strings.ToLower(item))
 		if err != nil {
-			msg.E("error for iexclude pattern: %v", err)
+			msg.E("error for iinclude pattern: %v", err)
 		}
 
 		selectedForRestore = matched || matchedInsensitive
