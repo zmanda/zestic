@@ -683,12 +683,15 @@ func (node *Node) fillExtra(path string, fi os.FileInfo) error {
 		return errors.Errorf("invalid node type %q", node.Type)
 	}
 
-	err := node.fillExtendedAttributes(path)
-	errGen := node.fillGenericAttributes(path, fi, stat)
-	if err == nil {
-		err = errGen
-	} else {
-		debug.Log("Error filling generic attributes for %v at %v : %v", node.Name, path, errGen)
+	allowExtended, err := node.fillGenericAttributes(path, fi, stat)
+	if allowExtended {
+		// Skip processing ExtendedAttributes if allowExtended is false.
+		errEx := node.fillExtendedAttributes(path)
+		if err == nil {
+			err = errEx
+		} else {
+			debug.Log("Error filling extended attributes for %v at %v : %v", node.Name, path, errEx)
+		}
 	}
 	return err
 }
