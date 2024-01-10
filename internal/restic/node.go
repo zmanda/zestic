@@ -20,6 +20,13 @@ import (
 	"github.com/restic/restic/internal/fs"
 )
 
+// Attribute interface defines common methods for ExtendedAttribute and GenericAttribute.
+// Only need the getters in the interface.
+type Attribute interface {
+	GetName() string
+	GetValue() []byte
+}
+
 // ExtendedAttribute is a tuple storing the xattr name and value.
 type ExtendedAttribute struct {
 	Name  string `json:"name"`
@@ -31,6 +38,26 @@ type ExtendedAttribute struct {
 type GenericAttribute struct {
 	Name  string `json:"name"`
 	Value []byte `json:"value"`
+}
+
+// GetName implements the GetName method for ExtendedAttribute.
+func (ea *ExtendedAttribute) GetName() string {
+	return ea.Name
+}
+
+// GetValue implements the GetValue method for ExtendedAttribute.
+func (ea *ExtendedAttribute) GetValue() []byte {
+	return ea.Value
+}
+
+// GetName implements the GetName method for GenericAttribute.
+func (ga *GenericAttribute) GetName() string {
+	return ga.Name
+}
+
+// GetValue implements the GetValue method for GenericAttribute.
+func (ga *GenericAttribute) GetValue() []byte {
+	return ga.Value
 }
 
 // GenericAttributeType can be used for OS specific functionalities by defining specific types in each specific node_xx file.
@@ -504,6 +531,9 @@ func (node Node) Equals(other Node) bool {
 	if !node.sameExtendedAttributes(other) {
 		return false
 	}
+	if !node.sameGenericAttributes(other) {
+		return false
+	}
 	if node.Subtree != nil {
 		if other.Subtree == nil {
 			return false
@@ -546,7 +576,33 @@ func (node Node) sameContent(other Node) bool {
 }
 
 func (node Node) sameExtendedAttributes(other Node) bool {
-	if len(node.ExtendedAttributes) != len(other.ExtendedAttributes) {
+	// Converting the array of ExtendedAttributes to an array of Attribute
+	var attributes []Attribute
+	for _, ea := range node.ExtendedAttributes {
+		attributes = append(attributes, &ea)
+	}
+	var otherAttributes []Attribute
+	for _, ea := range other.ExtendedAttributes {
+		otherAttributes = append(otherAttributes, &ea)
+	}
+	return sameAttributes(attributes, otherAttributes)
+}
+
+func (node Node) sameGenericAttributes(other Node) bool {
+	// Converting the array of GenericAttributes to an array of Attribute
+	var attributes []Attribute
+	for _, ga := range node.GenericAttributes {
+		attributes = append(attributes, &ga)
+	}
+	var otherAttributes []Attribute
+	for _, ga := range other.GenericAttributes {
+		otherAttributes = append(otherAttributes, &ga)
+	}
+	return sameAttributes(attributes, otherAttributes)
+}
+
+func sameAttributes(attributes []Attribute, otherAttributes []Attribute) bool {
+	if len(attributes) != len(otherAttributes) {
 		return false
 	}
 
@@ -555,33 +611,33 @@ func (node Node) sameExtendedAttributes(other Node) bool {
 		value   []byte
 		present bool
 	}
-	attributes := make(map[string]mapvalue)
-	for _, attr := range node.ExtendedAttributes {
-		attributes[attr.Name] = mapvalue{value: attr.Value}
+	attributesConverted := make(map[string]mapvalue)
+	for _, attr := range attributes {
+		attributesConverted[attr.GetName()] = mapvalue{value: attr.GetValue()}
 	}
 
-	for _, attr := range other.ExtendedAttributes {
-		v, ok := attributes[attr.Name]
+	for _, attr := range otherAttributes {
+		v, ok := attributesConverted[attr.GetName()]
 		if !ok {
 			// extended attribute is not set for node
-			debug.Log("other node has attribute %v, which is not present in node", attr.Name)
+			debug.Log("other node has attribute %v, which is not present in node", attr.GetName())
 			return false
 
 		}
 
-		if !bytes.Equal(v.value, attr.Value) {
+		if !bytes.Equal(v.value, attr.GetValue()) {
 			// attribute has different value
-			debug.Log("attribute %v has different value", attr.Name)
+			debug.Log("attribute %v has different value", attr.GetName())
 			return false
 		}
 
 		// remember that this attribute is present in other.
 		v.present = true
-		attributes[attr.Name] = v
+		attributesConverted[attr.GetName()] = v
 	}
 
 	// check for attributes that are not present in other
-	for name, v := range attributes {
+	for name, v := range attributesConverted {
 		if !v.present {
 			debug.Log("attribute %v not present in other node", name)
 			return false
