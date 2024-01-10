@@ -74,6 +74,6 @@ func (node *Node) restoreGenericAttributes(_ string) error {
 }
 
 // fillGenericAttributes is a no-op.
-func (node *Node) fillGenericAttributes(_ string, _ os.FileInfo, _ *statT) error {
-	return nil
+func (node *Node) fillGenericAttributes(_ string, _ os.FileInfo, _ *statT) (allowExtended bool, err error) {
+	return true, nil
 }

@@ -189,39 +189,41 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 
 // fillGenericAttributes fills in the generic attributes for windows like FileAttributes,
 // Created time and SecurityDescriptor.
-func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (err error) {
-	if strings.Contains(filepath.Base(path), ":") || strings.HasSuffix(filepath.Clean(path), `\`) {
-		//Do not process for windows directories like C:, D: and for Alternate Data Streams in Windows
-		//Filepath.Clean(path) ends with '\' for Windows root drives only.
-		return nil
+func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
+	if strings.HasSuffix(filepath.Clean(path), `\`) {
+		// Do not process for windows directories like C:, D:
+		// Filepath.Clean(path) ends with '\' for Windows root drives only.
+		return false, nil
 	}
-	// Add File Attributes
-	node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
-
-	//Add Creation Time
-	node.appendGenericAttribute(getCreationTime(fi, path))
-
-	//Add Has Ads
-	hasAds, hasAdsAttribute := getHasAds(path)
-	if hasAds {
-		node.appendGenericAttribute(hasAdsAttribute)
-	}
-
 	//Add Is Ads
 	isAds, isAdsAttribute := getIsAds(path)
 	if isAds {
 		node.appendGenericAttribute(isAdsAttribute)
-	}
-
-	if node.Type == "file" || node.Type == "dir" {
-		sd, err := getSecurityDescriptor(path)
-		if err == nil {
-			//Add Security Descriptor
-			node.appendGenericAttribute(sd)
+		// Do not process remaining generic attributes for Alternate Data Streams in Windows
+		// Also do not allow to process extended attributes for ADS.
+		return false, err
+	} else {
+		//Add Has Ads
+		hasAds, hasAdsAttribute := getHasAds(path)
+		if hasAds {
+			node.appendGenericAttribute(hasAdsAttribute)
 		}
-	}
 
-	return err
+		// Add File Attributes
+		node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
+
+		//Add Creation Time
+		node.appendGenericAttribute(getCreationTime(fi, path))
+
+		if node.Type == "file" || node.Type == "dir" {
+			sd, err := getSecurityDescriptor(path)
+			if err == nil {
+				//Add Security Descriptor
+				node.appendGenericAttribute(sd)
+			}
+		}
+		return true, err
+	}
 }
 
 func (node *Node) appendGenericAttribute(genericAttribute GenericAttribute) {
