@@ -43,7 +43,7 @@ func (node *Node) restoreGenericAttributes(path string) error {
 	for _, attr := range node.GenericAttributes {
 		handleUnknownGenericAttributeFound(attr.Name)
 	}
-	return RestoreMode(path)
+	return node.RestoreMode(path)
 }
 
 // fillGenericAttributes is a no-op on AIX.
