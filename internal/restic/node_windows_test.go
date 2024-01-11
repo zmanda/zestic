@@ -134,13 +134,13 @@ func TestRestoreFileAttributes(t *testing.T) {
 	tempDir := t.TempDir()
 	fileAttributes := [][]byte{
 		//normal
-		[]uint8{syscall.FILE_ATTRIBUTE_NORMAL, 0x0, 0x0, 0x0},
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_NORMAL),
 		//hidden
-		[]uint8{syscall.FILE_ATTRIBUTE_HIDDEN, 0x0, 0x0, 0x0},
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_HIDDEN),
 		//system
-		[]uint8{syscall.FILE_ATTRIBUTE_SYSTEM, 0x0, 0x0, 0x0},
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_SYSTEM),
 		//archive
-		[]uint8{syscall.FILE_ATTRIBUTE_ARCHIVE, 0x0, 0x0, 0x0},
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_ARCHIVE),
 	}
 	for i, fileAttr := range fileAttributes {
 		expectedNodes := []restic.Node{
@@ -159,9 +159,9 @@ func TestRestoreFileAttributes(t *testing.T) {
 
 	folderAttributes := [][]byte{
 		//hidden
-		[]uint8{syscall.FILE_ATTRIBUTE_DIRECTORY | syscall.FILE_ATTRIBUTE_HIDDEN, 0, 0, 0},
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | syscall.FILE_ATTRIBUTE_HIDDEN),
 		//normal
-		[]uint8{syscall.FILE_ATTRIBUTE_DIRECTORY, 0, 0, 0},
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY),
 	}
 	for i, folderAttr := range folderAttributes {
 		expectedNodes := []restic.Node{
