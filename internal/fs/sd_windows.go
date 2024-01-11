@@ -115,6 +115,19 @@ func SetFileSecurityDescriptor(filePath string, securityDescriptor string) error
 	return nil
 }
 
+var (
+	onceBackup  sync.Once
+	onceRestore sync.Once
+
+	SeBackupPrivilege   = "SeBackupPrivilege"
+	SeRestorePrivilege  = "SeRestorePrivilege"
+	SeSecurityPrivilege = "SeSecurityPrivilege"
+
+	backupPrivilegeError  error
+	restorePrivilegeError error
+	lowerPrivileges       bool
+)
+
 // Flags for backup and restore with admin permissions
 var highSecurityFlags windows.SECURITY_INFORMATION = windows.OWNER_SECURITY_INFORMATION | windows.GROUP_SECURITY_INFORMATION | windows.DACL_SECURITY_INFORMATION | windows.SACL_SECURITY_INFORMATION | windows.LABEL_SECURITY_INFORMATION | windows.ATTRIBUTE_SECURITY_INFORMATION | windows.SCOPE_SECURITY_INFORMATION | windows.BACKUP_SECURITY_INFORMATION | windows.PROTECTED_DACL_SECURITY_INFORMATION | windows.PROTECTED_SACL_SECURITY_INFORMATION
 
@@ -142,6 +155,48 @@ func setNamedSecurityInfoHigh(filePath string, owner *windows.SID, group *window
 // setNamedSecurityInfoLow sets the lower level SecurityDescriptor which requires no admin permissions.
 func setNamedSecurityInfoLow(filePath string, dacl *windows.ACL) error {
 	return windows.SetNamedSecurityInfo(filePath, windows.SE_FILE_OBJECT, lowRestoreSecurityFlags, nil, nil, dacl, nil)
+}
+
+// enableBackupPrivilege enables privilege for backing up security descriptors
+func enableBackupPrivilege() {
+	err := enableProcessPrivileges([]string{SeBackupPrivilege})
+	if err != nil {
+		backupPrivilegeError = fmt.Errorf("error enabling backup privilege: %w", err)
+	}
+}
+
+// enableBackupPrivilege enables privilege for restoring security descriptors
+func enableRestorePrivilege() {
+	err := enableProcessPrivileges([]string{SeRestorePrivilege, SeSecurityPrivilege})
+	if err != nil {
+		restorePrivilegeError = fmt.Errorf("error enabling restore/security privilege: %w", err)
+	}
+}
+
+// DisableBackupPrivileges disables privileges that are needed for backup operations.
+// They may be reenabled if GetFileSecurityDescriptor is called again.
+func DisableBackupPrivileges() error {
+	//Reset the once so that backup privileges can be enabled again if needed.
+	onceBackup = sync.Once{}
+	return enableDisableProcessPrivilege([]string{SeBackupPrivilege}, 0)
+}
+
+// DisableRestorePrivileges disables privileges that are needed for restore operations.
+// They may be reenabled if SetFileSecurityDescriptor is called again.
+func DisableRestorePrivileges() error {
+	//Reset the once so that restore privileges can be enabled again if needed.
+	onceRestore = sync.Once{}
+	return enableDisableProcessPrivilege([]string{SeRestorePrivilege, SeSecurityPrivilege}, 0)
+}
+
+// isHandleEOFError checks if the error is ERROR_HANDLE_EOF
+func isHandlePrivilegeNotHeldError(err error) bool {
+	// Use a type assertion to check if the error is of type syscall.Errno
+	if errno, ok := err.(syscall.Errno); ok {
+		// Compare the error code to the expected value
+		return errno == windows.ERROR_PRIVILEGE_NOT_HELD
+	}
+	return false
 }
 
 // The code below was adapted from github.com/Microsoft/go-winio under MIT license.
@@ -186,42 +241,19 @@ const (
 
 	//revive:disable-next-line:var-naming ALL_CAPS
 	ERROR_NOT_ALL_ASSIGNED syscall.Errno = windows.ERROR_NOT_ALL_ASSIGNED
-
-	SeBackupPrivilege   = "SeBackupPrivilege"
-	SeRestorePrivilege  = "SeRestorePrivilege"
-	SeSecurityPrivilege = "SeSecurityPrivilege"
 )
 
 var (
 	errErrorIOPending error = syscall.Errno(errnoErrorIOPending)
 	errErrorEinval    error = syscall.EINVAL
 
-	privNames             = make(map[string]uint64)
-	privNameMutex         sync.Mutex
-	onceBackup            sync.Once
-	onceRestore           sync.Once
-	backupPrivilegeError  error
-	restorePrivilegeError error
-	lowerPrivileges       bool
+	privNames     = make(map[string]uint64)
+	privNameMutex sync.Mutex
 )
 
 // PrivilegeError represents an error enabling privileges.
 type PrivilegeError struct {
 	privileges []uint64
-}
-
-func enableBackupPrivilege() {
-	err := enableProcessPrivileges([]string{SeBackupPrivilege})
-	if err != nil {
-		backupPrivilegeError = fmt.Errorf("error enabling backup privilege: %w", err)
-	}
-}
-
-func enableRestorePrivilege() {
-	err := enableProcessPrivileges([]string{SeRestorePrivilege, SeSecurityPrivilege})
-	if err != nil {
-		restorePrivilegeError = fmt.Errorf("error enabling restore/security privilege: %w", err)
-	}
 }
 
 func SecurityDescriptorBytesToStruct(sd []byte) (*windows.SECURITY_DESCRIPTOR, error) {
@@ -249,6 +281,12 @@ func (e *PrivilegeError) Error() string {
 		s += `"`
 		s += getPrivilegeName(p)
 		s += `"`
+	}
+	if backupPrivilegeError != nil {
+		s += " backupPrivilegeError:" + backupPrivilegeError.Error()
+	}
+	if restorePrivilegeError != nil {
+		s += " restorePrivilegeError:" + restorePrivilegeError.Error()
 	}
 	return s
 }
@@ -279,22 +317,6 @@ func enableProcessPrivileges(names []string) error {
 // DisableProcessPrivileges disables privileges globally for the process.
 func DisableProcessPrivileges(names []string) error {
 	return enableDisableProcessPrivilege(names, 0)
-}
-
-// DisableBackupPrivileges disables privileges that are needed for backup operations.
-// They may be reenabled if GetFileSecurityDescriptor is called again.
-func DisableBackupPrivileges() error {
-	//Reset the once so that backup privileges can be enabled again if needed.
-	onceBackup = sync.Once{}
-	return enableDisableProcessPrivilege([]string{SeBackupPrivilege}, 0)
-}
-
-// DisableRestorePrivileges disables privileges that are needed for restore operations.
-// They may be reenabled if SetFileSecurityDescriptor is called again.
-func DisableRestorePrivileges() error {
-	//Reset the once so that restore privileges can be enabled again if needed.
-	onceRestore = sync.Once{}
-	return enableDisableProcessPrivilege([]string{SeRestorePrivilege, SeSecurityPrivilege}, 0)
 }
 
 func enableDisableProcessPrivilege(names []string, action uint32) error {
@@ -436,14 +458,4 @@ func errnoErr(e syscall.Errno) error {
 	// error values see on Windows. (perhaps when running
 	// all.bat?)
 	return e
-}
-
-// isHandleEOFError checks if the error is ERROR_HANDLE_EOF
-func isHandlePrivilegeNotHeldError(err error) bool {
-	// Use a type assertion to check if the error is of type syscall.Errno
-	if errno, ok := err.(syscall.Errno); ok {
-		// Compare the error code to the expected value
-		return errno == windows.ERROR_PRIVILEGE_NOT_HELD
-	}
-	return false
 }
