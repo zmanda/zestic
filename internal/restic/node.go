@@ -303,20 +303,19 @@ func (node Node) restoreMetadata(path string) error {
 			firsterr = err
 		}
 	}
-	return firsterr
-}
 
-func (node Node) RestoreMode(path string) (err error) {
+	//Moving RestoreTimestamps and restoreExtendedAttributes calls above as for readonly files
+	//calling Chmod below will no longer allow any modifications to be made on the file and the
+	//calls above would fail.
 	if node.Type != "symlink" {
-		// fs.Chmod(path, mode) and syscall.SetFileAttributes(pathPointer, attrs)
-		// are two different approaches to modifying file attributes
-		// For Unix we use fs.Chmod(path, mode) for windows we call
-		// syscall.SetFileAttributes(pathPointer, attrs) when restoring generic attributes.
-		if firsterr := fs.Chmod(path, node.Mode); firsterr != nil {
-			err = errors.WithStack(firsterr)
+		if err := fs.Chmod(path, node.Mode); err != nil {
+			if firsterr != nil {
+				firsterr = errors.WithStack(err)
+			}
 		}
 	}
-	return err
+
+	return firsterr
 }
 
 func (node Node) restoreExtendedAttributes(path string) error {
