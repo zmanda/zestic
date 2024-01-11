@@ -39,7 +39,7 @@ func newFilesWriter(count int) *filesWriter {
 	}
 }
 
-func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, createSize int64, sparse bool) error {
+func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, createSize int64, fileInfo *fileInfo) error {
 	bucket := &w.buckets[uint(xxhash.Sum64String(path))%uint(len(w.buckets))]
 
 	acquireWriter := func() (*partialFile, error) {
@@ -51,16 +51,16 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 			return wr, nil
 		}
 
-		f, err := w.OpenFile(createSize, path)
+		f, err := w.OpenFile(createSize, path, fileInfo)
 		if err != nil {
 			return nil, err
 		}
 
-		wr := &partialFile{File: f, users: 1, sparse: sparse}
+		wr := &partialFile{File: f, users: 1, sparse: fileInfo.sparse}
 		bucket.files[path] = wr
 
 		if createSize >= 0 {
-			if sparse {
+			if fileInfo.sparse {
 				err = truncateSparse(f, createSize)
 				if err != nil {
 					return nil, err
@@ -107,4 +107,19 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 	}
 
 	return releaseWriter(wr)
+}
+
+// OpenFile opens the file with create, truncate and write only options if
+// createSize is specified greater than 0 i.e. if the file hasn't already
+// been created. Otherwise it opens the file with only write only option.
+func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (file *os.File, err error) {
+	var flags int
+	if createSize >= 0 {
+		flags = os.O_CREATE | os.O_TRUNC | os.O_WRONLY
+	} else {
+		flags = os.O_WRONLY
+	}
+
+	file, err = os.OpenFile(path, flags, 0600)
+	return file, err
 }

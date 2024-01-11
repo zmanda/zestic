@@ -217,7 +217,12 @@ func (node Node) GetExtendedAttribute(a string) []byte {
 
 // GetGenericAttribute gets the generic attribute for the specified GenericAttributeType from the node.
 func (node Node) GetGenericAttribute(genericAttributeType GenericAttributeType) []byte {
-	for _, attr := range node.GenericAttributes {
+	return GetGenericAttribute(genericAttributeType, node.GenericAttributes)
+}
+
+// GetGenericAttribute gets the generic attributes for the specified GenericAttributeType from the specified GenericAttribute array.
+func GetGenericAttribute(genericAttributeType GenericAttributeType, genericAttributes []GenericAttribute) []byte {
+	for _, attr := range genericAttributes {
 		if attr.Name == string(genericAttributeType) {
 			return attr.Value
 		}

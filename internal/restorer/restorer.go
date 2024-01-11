@@ -287,7 +287,7 @@ func (res *Restorer) RestoreTo(ctx context.Context, dst string) error {
 				res.addFile(node, node.Size)
 			}
 
-			filerestorer.addFile(location, node.Content, int64(node.Size))
+			filerestorer.addFile(location, node.Content, node.GenericAttributes, int64(node.Size))
 
 			return nil
 		},

@@ -29,6 +29,7 @@ type fileInfo struct {
 	lock       sync.Mutex
 	inProgress bool
 	sparse     bool
+	attrs      []restic.GenericAttribute
 	size       int64
 	location   string      // file on local filesystem relative to restorer basedir
 	blobs      interface{} // blobs of the file
@@ -87,8 +88,8 @@ func newFileRestorer(dst string,
 	}
 }
 
-func (r *fileRestorer) addFile(location string, content restic.IDs, size int64) {
-	r.files = append(r.files, &fileInfo{location: location, blobs: content, size: size})
+func (r *fileRestorer) addFile(location string, content restic.IDs, attrs []restic.GenericAttribute, size int64) {
+	r.files = append(r.files, &fileInfo{location: location, attrs: attrs, blobs: content, size: size})
 }
 
 func (r *fileRestorer) targetPath(location string) string {
@@ -277,7 +278,7 @@ func (r *fileRestorer) downloadPack(ctx context.Context, pack *packInfo) error {
 						file.inProgress = true
 						createSize = file.size
 					}
-					writeErr := r.filesWriter.writeToFile(r.targetPath(file.location), blobData, offset, createSize, file.sparse)
+					writeErr := r.filesWriter.writeToFile(r.targetPath(file.location), blobData, offset, createSize, file)
 
 					if r.progress != nil {
 						r.progress.AddProgress(file.location, uint64(len(blobData)), uint64(file.size))
