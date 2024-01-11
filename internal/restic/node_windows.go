@@ -234,10 +234,15 @@ func (node *Node) appendGenericAttribute(genericAttribute GenericAttribute) {
 }
 
 func getFileAttributes(fileattr uint32) (fileAttribute GenericAttribute) {
-	fileAttrData := make([]byte, 4)
-	binary.LittleEndian.PutUint32(fileAttrData, fileattr)
+	fileAttrData := UInt32ToBytes(fileattr)
 	fileAttribute = NewGenericAttribute(TypeFileAttribute, fileAttrData)
 	return fileAttribute
+}
+
+func UInt32ToBytes(value uint32) (bytes []byte) {
+	bytes = make([]byte, 4)
+	binary.LittleEndian.PutUint32(bytes, value)
+	return bytes
 }
 
 func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute GenericAttribute) {
