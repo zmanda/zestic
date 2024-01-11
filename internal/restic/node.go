@@ -273,12 +273,13 @@ func (node *Node) CreateAt(ctx context.Context, path string, repo Repository) er
 }
 
 // RestoreMetadata restores node metadata
-func (node Node) RestoreMetadata(path string) error {
-	err := node.restoreMetadata(path)
-	if err != nil {
-		debug.Log("restoreMetadata(%s) error %v", path, err)
+func (node Node) RestoreMetadata(path string) (err error) {
+	if fs.IsMainFile(path) {
+		err = node.restoreMetadata(path)
+		if err != nil {
+			debug.Log("restoreMetadata(%s) error %v", path, err)
+		}
 	}
-
 	return err
 }
 
