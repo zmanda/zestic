@@ -24,11 +24,11 @@ func (node *Node) fillExtendedAttributes(_ string) error {
 }
 
 // restoreGenericAttributes is no-op on openbsd.
-func (node *Node) restoreGenericAttributes(path string) error {
+func (node *Node) restoreGenericAttributes(_ string) error {
 	for _, attr := range node.GenericAttributes {
 		handleUnknownGenericAttributeFound(attr.Name)
 	}
-	return node.RestoreMode(path)
+	return nil
 }
 
 // fillGenericAttributes is a no-op on openbsd.
