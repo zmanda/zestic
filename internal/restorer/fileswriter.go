@@ -59,7 +59,8 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 		wr := &partialFile{File: f, users: 1, sparse: fileInfo.sparse}
 		bucket.files[path] = wr
 
-		if createSize >= 0 {
+		if createSize >= 0 && f != nil {
+			// There are case like ADS files where f can be nil
 			if fileInfo.sparse {
 				err = truncateSparse(f, createSize)
 				if err != nil {

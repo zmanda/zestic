@@ -194,6 +194,10 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 	isAds, isAdsAttribute := getIsAds(path)
 	if isAds {
 		node.appendGenericAttribute(isAdsAttribute)
+		// Add File Attributes
+		// Do not set FileAttributes for root drives.
+		// Ads will not appear on root drives.
+		node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
 		// Do not process remaining generic attributes for Alternate Data Streams in Windows
 		// Also do not allow to process extended attributes for ADS.
 		return false, err

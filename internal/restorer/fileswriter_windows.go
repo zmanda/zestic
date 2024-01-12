@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"os"
 
+	"github.com/restic/restic/internal/fs"
 	"github.com/restic/restic/internal/restic"
 	"golang.org/x/sys/windows"
 )
@@ -16,29 +17,36 @@ import (
 // file before writing the stream) and then when the main file is written
 // later, the ads stream can be overwritten.
 func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInfo) (file *os.File, err error) {
-	var flags int
-	// If a file has ADS, we will have a GenericAttribute of
-	// type TypeHasADS added in the file with values as a string of ads stream names
-	// and we will do the following only if the TypeHasADS attribute is found in the node.
-	// Otherwise we will directly just use the create option while opening the file.
-	if createSize >= 0 {
-		var hasAds bool
-		var encrypted bool
-		attrs := fileInfo.attrs
-		if len(attrs) > 0 {
-			hasAds = restic.GetGenericAttribute(restic.TypeHasADS, attrs) != nil
-			fileAttrBytes := restic.GetGenericAttribute(restic.TypeFileAttribute, attrs)
-			if len(fileAttrBytes) > 0 {
-				fileAttr := binary.LittleEndian.Uint32(fileAttrBytes)
-				encrypted = fileAttr&windows.FILE_ATTRIBUTE_ENCRYPTED != 0
+	var fileAttributes uint32
+	var isAds bool
+	fileAttributes, isAds, file, err = fw.openFileImpl(createSize, path, fileInfo)
+	if err != nil && isAccessDeniedError(err) {
+		// Access is denied, remove readonly and try again.
+		err = setReadonlyIfNeeded(fileAttributes, isAds, path)
+		if err != nil {
+			_, _, file, err = fw.openFileImpl(createSize, path, fileInfo)
+			if err != nil {
+				return nil, err
 			}
 		}
+	}
+	return file, err
+}
 
-		if encrypted {
+func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fileInfo) (fileAttributes uint32, isAds bool, file *os.File, err error) {
+	var flags int
+	if createSize >= 0 {
+		var hasAds, isEncrypted bool
+		fileAttributes, hasAds, isAds, isEncrypted = checkGenericAttributes(fileInfo, path)
+		if err != nil {
+			return fileAttributes, isAds, nil, err
+		}
+
+		if isEncrypted {
 			var ptr *uint16
 			ptr, err = windows.UTF16PtrFromString(path)
 			if err != nil {
-				return nil, err
+				return fileAttributes, isAds, nil, err
 			}
 			// If the file is EFS encrypted, create it by specifying FILE_ATTRIBUTE_ENCRYPTED to windows.CreateFile
 			var handle windows.Handle
@@ -68,5 +76,47 @@ func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInf
 		flags = os.O_WRONLY
 		file, err = os.OpenFile(path, flags, 0600)
 	}
-	return file, err
+	return fileAttributes, isAds, file, err
+}
+
+// checkGenericAttributes checks for the required generic attributes
+func checkGenericAttributes(fileInfo *fileInfo, path string) (fileAttributes uint32, hasAds bool, isAds bool, isEncrypted bool) {
+	attrs := fileInfo.attrs
+	if len(attrs) > 0 {
+		hasAds = restic.GetGenericAttribute(restic.TypeHasADS, attrs) != nil
+		isAds = restic.GetGenericAttribute(restic.TypeIsADS, attrs) != nil
+		fileAttrBytes := restic.GetGenericAttribute(restic.TypeFileAttribute, attrs)
+		if len(fileAttrBytes) > 0 {
+			fileAttributes := binary.LittleEndian.Uint32(fileAttrBytes)
+			isEncrypted = fileAttributes&windows.FILE_ATTRIBUTE_ENCRYPTED != 0
+
+		}
+	}
+	return fileAttributes, hasAds, isAds, isEncrypted
+}
+
+// setReadonlyIfNeeded check if file is readonly, and then removes the readonly flag
+// as it will be set while applying metadata in the next pass.
+func setReadonlyIfNeeded(fileAttributes uint32, isAds bool, path string) error {
+	readonly := fileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0
+	if readonly {
+		if isAds {
+			// If this is an ads stream we need to get the main file for setting attributes.
+			path = fs.TrimAds(path)
+		}
+		ptr, err := windows.UTF16PtrFromString(path)
+		if err != nil {
+			return err
+		}
+		err = windows.SetFileAttributes(ptr, fileAttributes^windows.FILE_ATTRIBUTE_READONLY)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isAccessDeniedError checks if the error is ERROR_ACCESS_DENIED
+func isAccessDeniedError(err error) bool {
+	return fs.IsErrorOfType(err, windows.ERROR_ACCESS_DENIED)
 }
