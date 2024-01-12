@@ -582,7 +582,14 @@ func (node Node) sameContent(other Node) bool {
 }
 
 func (node Node) sameExtendedAttributes(other Node) bool {
-	// Converting the array of ExtendedAttributes to an array of Attribute
+	nl := len(node.ExtendedAttributes)
+	ol := len(other.ExtendedAttributes)
+	if nl != ol {
+		return false
+	} else if nl == 0 {
+		// This means ol is also 0
+		return true
+	} // Converting the array of ExtendedAttributes to an array of Attribute
 	var attributes []Attribute
 	for _, ea := range node.ExtendedAttributes {
 		attributes = append(attributes, &ea)
@@ -595,7 +602,14 @@ func (node Node) sameExtendedAttributes(other Node) bool {
 }
 
 func (node Node) sameGenericAttributes(other Node) bool {
-	// Converting the array of GenericAttributes to an array of Attribute
+	nl := len(node.GenericAttributes)
+	ol := len(other.GenericAttributes)
+	if nl != ol {
+		return false
+	} else if nl == 0 {
+		// This means ol is also 0
+		return true
+	} // Converting the array of GenericAttributes to an array of Attribute
 	var attributes []Attribute
 	for _, ga := range node.GenericAttributes {
 		attributes = append(attributes, &ga)
@@ -608,10 +622,6 @@ func (node Node) sameGenericAttributes(other Node) bool {
 }
 
 func sameAttributes(attributes []Attribute, otherAttributes []Attribute) bool {
-	if len(attributes) != len(otherAttributes) {
-		return false
-	}
-
 	// build a set of all attributes that node has
 	type mapvalue struct {
 		value   []byte
