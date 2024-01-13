@@ -71,7 +71,7 @@ func Setxattr(path, name string, data []byte) error {
 
 type statT syscall.Win32FileAttributeData
 
-func toStatT(i interface{}) (*statT, bool) {
+func ToStatT(i interface{}) (*statT, bool) {
 	s, ok := i.(*syscall.Win32FileAttributeData)
 	if ok && s != nil {
 		return (*statT)(s), true
@@ -279,11 +279,14 @@ func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error
 func getHasAds(path string) (hasAds bool, hasAdsAttribute GenericAttribute) {
 	s, names, err := fs.GetADStreamNames(path)
 	if s {
-		hasAdsAttribute = NewGenericAttribute(TypeHasADS, []byte(strings.Join(names, AdsSeparator)))
+		if len(names) > 0 {
+			hasAds = true
+			hasAdsAttribute = NewGenericAttribute(TypeHasADS, []byte(strings.Join(names, AdsSeparator)))
+		}
 	} else if err != nil {
 		debug.Log("Could not fetch ads information for %v %v.", path, err)
 	}
-	return s, hasAdsAttribute
+	return hasAds, hasAdsAttribute
 }
 
 func getIsAds(path string) (IsAds bool, isAdsAttribute GenericAttribute) {
@@ -334,6 +337,12 @@ func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 		return handleCreationTime(path, attr.Value)
 	case string(TypeSecurityDescriptor):
 		return handleSecurityDescriptor(path, attr.Value)
+	case string(TypeHasADS):
+		//No-op. Just confirming that we know this attribute.
+		return nil
+	case string(TypeIsADS):
+		//No-op. Just confirming that we know this attribute.
+		return nil
 	}
 	handleUnknownGenericAttributeFound(attr.Name)
 	return nil

@@ -60,7 +60,7 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 		bucket.files[path] = wr
 
 		if createSize >= 0 && f != nil {
-			// There are case like ADS files where f can be nil
+			// There are cases like ADS files where f can be nil
 			if fileInfo.sparse {
 				err = truncateSparse(f, createSize)
 				if err != nil {
@@ -108,19 +108,4 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 	}
 
 	return releaseWriter(wr)
-}
-
-// OpenFile opens the file with create, truncate and write only options if
-// createSize is specified greater than 0 i.e. if the file hasn't already
-// been created. Otherwise it opens the file with only write only option.
-func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (file *os.File, err error) {
-	var flags int
-	if createSize >= 0 {
-		flags = os.O_CREATE | os.O_TRUNC | os.O_WRONLY
-	} else {
-		flags = os.O_WRONLY
-	}
-
-	file, err = os.OpenFile(path, flags, 0600)
-	return file, err
 }

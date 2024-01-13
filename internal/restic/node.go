@@ -589,7 +589,8 @@ func (node Node) sameExtendedAttributes(other Node) bool {
 	} else if nl == 0 {
 		// This means ol is also 0
 		return true
-	} // Converting the array of ExtendedAttributes to an array of Attribute
+	}
+	// Converting the array of ExtendedAttributes to an array of Attribute
 	var attributes []Attribute
 	for _, ea := range node.ExtendedAttributes {
 		attributes = append(attributes, &ea)
@@ -609,7 +610,8 @@ func (node Node) sameGenericAttributes(other Node) bool {
 	} else if nl == 0 {
 		// This means ol is also 0
 		return true
-	} // Converting the array of GenericAttributes to an array of Attribute
+	}
+	// Converting the array of GenericAttributes to an array of Attribute
 	var attributes []Attribute
 	for _, ga := range node.GenericAttributes {
 		attributes = append(attributes, &ga)
@@ -725,7 +727,7 @@ func lookupGroup(gid uint32) string {
 }
 
 func (node *Node) fillExtra(path string, fi os.FileInfo) error {
-	stat, ok := toStatT(fi.Sys())
+	stat, ok := ToStatT(fi.Sys())
 	if !ok {
 		// fill minimal info with current values for uid, gid
 		node.UID = uint32(os.Getuid())
