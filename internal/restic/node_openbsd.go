@@ -13,17 +13,17 @@ func (s statT) atim() syscall.Timespec { return s.Atim }
 func (s statT) mtim() syscall.Timespec { return s.Mtim }
 func (s statT) ctim() syscall.Timespec { return s.Ctim }
 
-// Getxattr is a no-op on AIX.
+// Getxattr is a no-op on openbsd.
 func Getxattr(path, name string) ([]byte, error) {
 	return nil, nil
 }
 
-// Listxattr is a no-op on AIX.
+// Listxattr is a no-op on openbsd.
 func Listxattr(path string) ([]string, error) {
 	return nil, nil
 }
 
-// Setxattr is a no-op on AIX.
+// Setxattr is a no-op on openbsd.
 func Setxattr(path, name string, data []byte) error {
 	return nil
 }
