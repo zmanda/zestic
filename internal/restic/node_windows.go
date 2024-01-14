@@ -16,6 +16,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const AdsSeparator = "|"
+
 // mknod is not supported on Windows.
 func mknod(_ string, mode uint32, dev uint64) (err error) {
 	return errors.New("device nodes cannot be created on windows")
@@ -70,7 +72,7 @@ func Setxattr(path, name string, data []byte) error {
 
 type statT syscall.Win32FileAttributeData
 
-func toStatT(i interface{}) (*statT, bool) {
+func ToStatT(i interface{}) (*statT, bool) {
 	s, ok := i.(*syscall.Win32FileAttributeData)
 	if ok && s != nil {
 		return (*statT)(s), true
@@ -123,7 +125,7 @@ func (node Node) restoreExtendedAttributes(path string) (err error) {
 func (node *Node) fillExtendedAttributes(path string) (err error) {
 	var fileHandle windows.Handle
 
-	//Get file handle for file or dir
+	// Get file handle for file or dir
 	if node.Type == "file" {
 		if strings.HasSuffix(filepath.Clean(path), `\`) {
 			return nil
@@ -189,31 +191,45 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 // fillGenericAttributes fills in the generic attributes for windows like File Attributes,
 // Created time, Security Descriptor etc.
 func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
-	if strings.Contains(filepath.Base(path), ":") {
-		//Do not process for Alternate Data Streams in Windows
-		// Also do not allow processing of extended attributes for ADS.
-		return false, nil
-	}
-	if !strings.HasSuffix(filepath.Clean(path), `\`) {
-		// Do not process file attributes and created time for windows directories like
-		// C:, D:
-		// Filepath.Clean(path) ends with '\' for Windows root drives only.
-
+	// Add Is Ads
+	isAds, isAdsAttribute := getIsAds(path)
+	if isAds {
+		node.appendGenericAttribute(isAdsAttribute)
 		// Add File Attributes
+		// Do not set FileAttributes for root drives.
+		// Ads will not appear on root drives.
 		node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
-
-		//Add Creation Time
-		node.appendGenericAttribute(getCreationTime(fi, path))
-	}
-
-	if node.Type == "file" || node.Type == "dir" {
-		sd, err := getSecurityDescriptor(path)
-		if err == nil {
-			//Add Security Descriptor
-			node.appendGenericAttribute(sd)
+		// Do not process remaining generic attributes for Alternate Data Streams in Windows
+		// Also do not allow to process extended attributes for ADS.
+		return false, err
+	} else {
+		//Add Has Ads
+		hasAds, hasAdsAttribute := getHasAds(path)
+		if hasAds {
+			node.appendGenericAttribute(hasAdsAttribute)
 		}
+
+		if !strings.HasSuffix(filepath.Clean(path), `\`) {
+			// Do not process file attributes and created time for windows directories like
+			// C:, D:
+			// Filepath.Clean(path) ends with '\' for Windows root drives only.
+
+			// Add File Attributes
+			node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
+
+			// Add Creation Time
+			node.appendGenericAttribute(getCreationTime(fi, path))
+		}
+
+		if node.Type == "file" || node.Type == "dir" {
+			sd, err := getSecurityDescriptor(path)
+			if err == nil {
+				// Add Security Descriptor
+				node.appendGenericAttribute(sd)
+			}
+		}
+		return true, err
 	}
-	return true, err
 }
 
 // appendGenericAttribute appends a GenericAttribute to the node
@@ -272,6 +288,27 @@ func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error
 	return sdAttribute, nil
 }
 
+func getHasAds(path string) (hasAds bool, hasAdsAttribute GenericAttribute) {
+	s, names, err := fs.GetADStreamNames(path)
+	if s {
+		if len(names) > 0 {
+			hasAds = true
+			hasAdsAttribute = NewGenericAttribute(TypeHasADS, []byte(strings.Join(names, AdsSeparator)))
+		}
+	} else if err != nil {
+		debug.Log("Could not fetch ads information for %v %v.", path, err)
+	}
+	return hasAds, hasAdsAttribute
+}
+
+func getIsAds(path string) (IsAds bool, isAdsAttribute GenericAttribute) {
+	isAds := fs.IsAds(path)
+	if isAds {
+		isAdsAttribute = NewGenericAttribute(TypeIsADS, []byte(fs.TrimAds(path)))
+	}
+	return isAds, isAdsAttribute
+}
+
 // restoreExtendedAttributes handles restore of the Windows Extended Attributes to the specified path.
 // The Windows API requires setting of all the Extended Attributes in one call.
 func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute) (err error) {
@@ -312,6 +349,12 @@ func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 		return handleCreationTime(path, attr.Value)
 	case string(TypeSecurityDescriptor):
 		return handleSecurityDescriptor(path, attr.Value)
+	case string(TypeHasADS):
+		//No-op. Just confirming that we know this attribute.
+		return nil
+	case string(TypeIsADS):
+		//No-op. Just confirming that we know this attribute.
+		return nil
 	}
 	handleUnknownGenericAttributeFound(attr.Name)
 	return nil

@@ -3,6 +3,7 @@ package fs
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -123,4 +124,14 @@ func RemoveIfExists(filename string) error {
 // precise time unit. If there is an error, it will be of type *PathError.
 func Chtimes(name string, atime time.Time, mtime time.Time) error {
 	return os.Chtimes(fixpath(name), atime, mtime)
+}
+
+// IsErrorOfType checks if the error err is of specified errorno
+func IsErrorOfType(err error, errno syscall.Errno) bool {
+	// Use a type assertion to check if the error is of type syscall.Errno
+	if errnoFound, ok := err.(syscall.Errno); ok {
+		// Compare the error code to the expected value
+		return errnoFound == errno
+	}
+	return false
 }

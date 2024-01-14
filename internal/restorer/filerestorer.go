@@ -29,6 +29,7 @@ type fileInfo struct {
 	lock       sync.Mutex
 	inProgress bool
 	sparse     bool
+	attrs      []restic.GenericAttribute
 	size       int64
 	location   string      // file on local filesystem relative to restorer basedir
 	blobs      interface{} // blobs of the file
@@ -87,8 +88,8 @@ func newFileRestorer(dst string,
 	}
 }
 
-func (r *fileRestorer) addFile(location string, content restic.IDs, size int64) {
-	r.files = append(r.files, &fileInfo{location: location, blobs: content, size: size})
+func (r *fileRestorer) addFile(location string, content restic.IDs, attrs []restic.GenericAttribute, size int64) {
+	r.files = append(r.files, &fileInfo{location: location, attrs: attrs, blobs: content, size: size})
 }
 
 func (r *fileRestorer) targetPath(location string) string {
@@ -246,7 +247,10 @@ func (r *fileRestorer) downloadPack(ctx context.Context, pack *packInfo) error {
 		return err
 	}
 
+	// track already processed blobs for precise error reporting
+	processedBlobs := restic.NewBlobSet()
 	err := repository.StreamPack(ctx, r.packLoader, r.key, pack.id, blobList, func(h restic.BlobHandle, blobData []byte, err error) error {
+		processedBlobs.Insert(h)
 		blob := blobs[h.ID]
 		if err != nil {
 			for file := range blob.files {
@@ -274,7 +278,7 @@ func (r *fileRestorer) downloadPack(ctx context.Context, pack *packInfo) error {
 						file.inProgress = true
 						createSize = file.size
 					}
-					writeErr := r.filesWriter.writeToFile(r.targetPath(file.location), blobData, offset, createSize, file.sparse)
+					writeErr := r.filesWriter.writeToFile(r.targetPath(file.location), blobData, offset, createSize, file)
 
 					if r.progress != nil {
 						r.progress.AddProgress(file.location, uint64(len(blobData)), uint64(file.size))
@@ -292,7 +296,19 @@ func (r *fileRestorer) downloadPack(ctx context.Context, pack *packInfo) error {
 	})
 
 	if err != nil {
-		for file := range pack.files {
+		// only report error for not yet processed blobs
+		affectedFiles := make(map[*fileInfo]struct{})
+		for _, blob := range blobList {
+			if processedBlobs.Has(blob.BlobHandle) {
+				continue
+			}
+			blob := blobs[blob.ID]
+			for file := range blob.files {
+				affectedFiles[file] = struct{}{}
+			}
+		}
+
+		for file := range affectedFiles {
 			if errFile := sanitizeError(file, err); errFile != nil {
 				return errFile
 			}

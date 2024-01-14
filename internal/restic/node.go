@@ -80,6 +80,12 @@ const (
 	TypeCreationTime GenericAttributeType = "WinCreationTime"
 	// TypeSecurityDescriptor is the GenericAttributeType used for storing security descriptor for windows within the generic attributes map.
 	TypeSecurityDescriptor GenericAttributeType = "WinSecurityDesc"
+	// TypeHasADS is the GenericAttributeType used for to indicate that a file has Alternate Data Streams attached to it.
+	// The value will have a | separate list of the ADS attached to the file. Those files will have a generic attribute TypeIsADS.
+	TypeHasADS GenericAttributeType = "WinHasADS"
+	// TypeIsADS is the GenericAttributeType used for to indicate that a file represents an Alternate Data Streams and is attached to (child of) a file in the value.
+	// The file in the value will be a file which has a generic attribute TypeHasADS.
+	TypeIsADS GenericAttributeType = "WinIsADS"
 
 	//Generic Attributes for other OS types should be defined here.
 )
@@ -90,6 +96,8 @@ var genericAttributesForOS = map[string][]OSType{
 	string(TypeFileAttribute):      {WindowsOS},
 	string(TypeCreationTime):       {WindowsOS},
 	string(TypeSecurityDescriptor): {WindowsOS},
+	string(TypeHasADS):             {WindowsOS},
+	string(TypeIsADS):              {WindowsOS},
 }
 
 // Node is a file, directory or other item in a backup.
@@ -176,7 +184,7 @@ func NodeFromFileInfo(path string, fi os.FileInfo) (*Node, error) {
 }
 
 func nodeTypeFromFileInfo(fi os.FileInfo) string {
-	switch fi.Mode() & (os.ModeType | os.ModeCharDevice) {
+	switch fi.Mode() & os.ModeType {
 	case 0:
 		return "file"
 	case os.ModeDir:
@@ -191,6 +199,8 @@ func nodeTypeFromFileInfo(fi os.FileInfo) string {
 		return "fifo"
 	case os.ModeSocket:
 		return "socket"
+	case os.ModeIrregular:
+		return "irregular"
 	}
 
 	return ""
@@ -208,7 +218,12 @@ func (node Node) GetExtendedAttribute(a string) []byte {
 
 // GetGenericAttribute gets the generic attribute for the specified GenericAttributeType from the node.
 func (node Node) GetGenericAttribute(genericAttributeType GenericAttributeType) []byte {
-	for _, attr := range node.GenericAttributes {
+	return GetGenericAttribute(genericAttributeType, node.GenericAttributes)
+}
+
+// GetGenericAttribute gets the generic attributes for the specified GenericAttributeType from the specified GenericAttribute array.
+func GetGenericAttribute(genericAttributeType GenericAttributeType, genericAttributes []GenericAttribute) []byte {
+	for _, attr := range genericAttributes {
 		if attr.Name == string(genericAttributeType) {
 			return attr.Value
 		}
@@ -264,12 +279,13 @@ func (node *Node) CreateAt(ctx context.Context, path string, repo Repository) er
 }
 
 // RestoreMetadata restores node metadata
-func (node Node) RestoreMetadata(path string) error {
-	err := node.restoreMetadata(path)
-	if err != nil {
-		debug.Log("restoreMetadata(%s) error %v", path, err)
+func (node Node) RestoreMetadata(path string) (err error) {
+	if fs.IsMainFile(path) {
+		err = node.restoreMetadata(path)
+		if err != nil {
+			debug.Log("restoreMetadata(%s) error %v", path, err)
+		}
 	}
-
 	return err
 }
 
@@ -712,7 +728,7 @@ func lookupGroup(gid uint32) string {
 }
 
 func (node *Node) fillExtra(path string, fi os.FileInfo) error {
-	stat, ok := toStatT(fi.Sys())
+	stat, ok := ToStatT(fi.Sys())
 	if !ok {
 		// fill minimal info with current values for uid, gid
 		node.UID = uint32(os.Getuid())
@@ -749,7 +765,7 @@ func (node *Node) fillExtra(path string, fi os.FileInfo) error {
 	case "fifo":
 	case "socket":
 	default:
-		return errors.Errorf("invalid node type %q", node.Type)
+		return errors.Errorf("unsupported file type %q", node.Type)
 	}
 
 	allowExtended, err := node.fillGenericAttributes(path, fi, stat)

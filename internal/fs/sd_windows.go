@@ -191,12 +191,7 @@ func DisableRestorePrivileges() error {
 
 // isHandleEOFError checks if the error is ERROR_HANDLE_EOF
 func isHandlePrivilegeNotHeldError(err error) bool {
-	// Use a type assertion to check if the error is of type syscall.Errno
-	if errno, ok := err.(syscall.Errno); ok {
-		// Compare the error code to the expected value
-		return errno == windows.ERROR_PRIVILEGE_NOT_HELD
-	}
-	return false
+	return IsErrorOfType(err, windows.ERROR_PRIVILEGE_NOT_HELD)
 }
 
 // The code below was adapted from github.com/Microsoft/go-winio under MIT license.

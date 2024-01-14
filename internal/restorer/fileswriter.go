@@ -39,7 +39,7 @@ func newFilesWriter(count int) *filesWriter {
 	}
 }
 
-func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, createSize int64, sparse bool) error {
+func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, createSize int64, fileInfo *fileInfo) error {
 	bucket := &w.buckets[uint(xxhash.Sum64String(path))%uint(len(w.buckets))]
 
 	acquireWriter := func() (*partialFile, error) {
@@ -51,23 +51,17 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 			return wr, nil
 		}
 
-		var flags int
-		if createSize >= 0 {
-			flags = os.O_CREATE | os.O_TRUNC | os.O_WRONLY
-		} else {
-			flags = os.O_WRONLY
-		}
-
-		f, err := os.OpenFile(path, flags, 0600)
+		f, err := w.OpenFile(createSize, path, fileInfo)
 		if err != nil {
 			return nil, err
 		}
 
-		wr := &partialFile{File: f, users: 1, sparse: sparse}
+		wr := &partialFile{File: f, users: 1, sparse: fileInfo.sparse}
 		bucket.files[path] = wr
 
-		if createSize >= 0 {
-			if sparse {
+		if createSize >= 0 && f != nil {
+			// There are cases like ADS files where f can be nil
+			if fileInfo.sparse {
 				err = truncateSparse(f, createSize)
 				if err != nil {
 					return nil, err
@@ -94,6 +88,9 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 
 		if bucket.files[path].users == 1 {
 			delete(bucket.files, path)
+
+			//Remove the mutex
+			RemoveMutex(path)
 			return wr.Close()
 		}
 		bucket.files[path].users--
