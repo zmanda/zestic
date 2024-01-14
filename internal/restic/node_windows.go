@@ -26,6 +26,7 @@ func lchown(_ string, uid int, gid int) (err error) {
 }
 
 // restoreSymlinkTimestamps restores timestamps for symlinks
+// restoreSymlinkTimestamps restores timestamps for symlinks
 func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespec) error {
 	// tweaked version of UtimesNano from go/src/syscall/syscall_windows.go
 	pathp, e := syscall.UTF16PtrFromString(path)
@@ -113,7 +114,7 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 }
 
 // fillGenericAttributes fills in the generic attributes for windows like File Attributes,
-// Created time etc.
+// Created time, Security Descriptor etc.
 func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
 	if strings.Contains(filepath.Base(path), ":") {
 		//Do not process for Alternate Data Streams in Windows
@@ -181,6 +182,9 @@ func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Generic
 	return creationTimeAttribute
 }
 
+// getSecurityDescriptor function retrieves the GenericAttribute containing the byte representation
+// of the Security Descriptor. This byte representation is obtained from the encoded string form of
+// the raw binary Security Descriptor associated with the Windows file or folder.
 func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error) {
 	sd, err := fs.GetFileSecurityDescriptor(path)
 	if err != nil {
@@ -195,8 +199,8 @@ func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error
 	return sdAttribute, nil
 }
 
-// restoreGenericAttribute restores the generic attributes for windows like File Attributes,
-// Created time etc.
+// restoreGenericAttribute restores the generic attributes for Windows like File Attributes,
+// Created time, Security Descriptor etc.
 func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 	switch attr.Name {
 	case string(TypeFileAttribute):
@@ -253,6 +257,8 @@ func handleCreationTime(path string, data []byte) (err error) {
 	return nil
 }
 
+// handleSecurityDescriptor gets the Security Descriptor from the data and sets it to the file/folder at
+// the specified path.
 func handleSecurityDescriptor(path string, data []byte) error {
 	sd := string(data)
 
