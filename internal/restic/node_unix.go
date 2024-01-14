@@ -14,7 +14,10 @@ func lchown(name string, uid, gid int) error {
 
 type statT syscall.Stat_t
 
-func toStatT(i interface{}) (*statT, bool) {
+// ToStatT converts any struct that implements *syscall.Stat_t to a
+// *restic.statT of type syscall.Stat_t.
+// This is OS dependent.
+func ToStatT(i interface{}) (*statT, bool) {
 	s, ok := i.(*syscall.Stat_t)
 	if ok && s != nil {
 		return (*statT)(s), true

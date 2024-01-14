@@ -58,7 +58,7 @@ func checkFile(t testing.TB, stat *syscall.Stat_t, node *Node) {
 	}
 
 	// use the os dependent function to compare the timestamps
-	s, ok := toStatT(stat)
+	s, ok := ToStatT(stat)
 	if !ok {
 		return
 	}
