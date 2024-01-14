@@ -56,22 +56,24 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 
 		//Define all the flags
 		var hasAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool
-		var hasAdsValues []string
-		hasAdsValues, hasAds, isAds, isEncryptionNeeded = checkGenericAttributes(fileInfo, path)
+		var adsValues []string
+		adsValues, hasAds, isAds, isEncryptionNeeded = checkGenericAttributes(fileInfo, path)
 
 		// This means that this is an ads related file. It either has ads streams or is an ads streams
 		isAdsRelated := hasAds || isAds
 
 		var mainPath string
-		if isAdsRelated {
+		if isAds {
 			mainPath = fs.TrimAds(path)
+		} else {
+			mainPath = path
+		}
+		if isAdsRelated {
 			// Get or create a mutex based on the main file path
 			mutex := GetOrCreateMutex(mainPath)
 			mutex.Lock()
 			defer mutex.Unlock()
 			// Making sure the code below doesn't execute concurrently for the main file and any of the ads files
-		} else {
-			mainPath = path
 		}
 
 		if err != nil {
@@ -99,7 +101,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 		}
 		//At this point readonly flag is already handled and we need not consider it anymore.
 
-		file, err = handleCreateFile(path, mainPath, file, hasAdsValues, isAdsRelated, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
+		file, err = handleCreateFile(path, mainPath, file, adsValues, isAdsRelated, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
 	} else {
 		// File is already created. For subsequent writes, only use os.O_WRONLY flag.
 		flags = os.O_WRONLY
@@ -110,13 +112,13 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 }
 
 // handleCreateFile handles all the various combination of states while creating the file if needed
-func handleCreateFile(path string, mainPath string, fileIn *os.File, hasAdsValues []string, isAdsRelated, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
+func handleCreateFile(path string, mainPath string, fileIn *os.File, adsValues []string, isAdsRelated, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
 	if !isAdsRelated {
 		// This is the simplest case where ADS files are not involved.
 		file, err = handleCreateFileNonAds(path, fileIn, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
 	} else {
 		// This is a complex case needing coordination between the main file and the ads files.
-		file, err = handleCreateFileAds(path, mainPath, fileIn, hasAdsValues, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
+		file, err = handleCreateFileAds(path, mainPath, fileIn, adsValues, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
 	}
 
 	return file, err
@@ -201,7 +203,7 @@ func handleCreateFileNonAdsRemoveEncryption(path string, fileIn *os.File, isAlre
 }
 
 // handleCreateFileAds handles all the various combination of states while creating the ads related file if needed
-func handleCreateFileAds(path string, mainPath string, fileIn *os.File, hasAdsValues []string, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
+func handleCreateFileAds(path string, mainPath string, fileIn *os.File, adsValues []string, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
 	// Deduce the secondary encryption handling flags
 	isSameEncryption, isAddEncryption, isRemoveEncryption := deduceEncryptionHandlingFlags(isAlreadyExists, isEncryptionNeeded, isAlreadyEncrypted)
 
@@ -209,7 +211,7 @@ func handleCreateFileAds(path string, mainPath string, fileIn *os.File, hasAdsVa
 		file, err = handleCreateFileAdsSameEncryption(path, fileIn, hasAds, isAds, isEncryptionNeeded, isAlreadyExists)
 		if hasAds && isAlreadyExists {
 			//check which streams need to be removed and remove the extra streams
-			removeExtraStreams(path, hasAdsValues, mainPath)
+			removeExtraStreams(path, adsValues, mainPath)
 		}
 		return file, err
 	}
@@ -218,7 +220,7 @@ func handleCreateFileAds(path string, mainPath string, fileIn *os.File, hasAdsVa
 		file, err = handleCreateFileAdsAddEncryption(path, mainPath, fileIn, isAds, isAlreadyExists)
 		if hasAds && isAlreadyExists {
 			//check which streams need to be removed and remove the extra streams
-			removeExtraStreams(path, hasAdsValues, mainPath)
+			removeExtraStreams(path, adsValues, mainPath)
 		}
 		return file, err
 	}
@@ -227,7 +229,7 @@ func handleCreateFileAds(path string, mainPath string, fileIn *os.File, hasAdsVa
 		file, err = handleCreateFileAdsRemoveEncryption(path, mainPath, fileIn, isAlreadyExists)
 		if hasAds && isAlreadyExists {
 			//check which streams need to be removed and remove the extra streams
-			removeExtraStreams(path, hasAdsValues, mainPath)
+			removeExtraStreams(path, adsValues, mainPath)
 		}
 		return file, err
 	}
@@ -410,10 +412,10 @@ func handleCreateFileAdsRemoveEncryption(path string, mainPath string, fileIn *o
 
 // removeExtraStreams removes any extra streams on the file which are not present in the
 // backed up state in the generic attribute TypeHasAds.
-func removeExtraStreams(path string, hasAdsValues []string, mainPath string) {
+func removeExtraStreams(path string, adsValues []string, mainPath string) {
 	success, existingStreams, _ := fs.GetADStreamNames(path)
 	if success {
-		extraStreams := filterItems(hasAdsValues, existingStreams)
+		extraStreams := filterItems(adsValues, existingStreams)
 		for _, extraStream := range extraStreams {
 			streamToRemove := mainPath + extraStream
 			err := os.Remove(streamToRemove)
@@ -501,12 +503,13 @@ func isFileEncrypted(file *os.File) (isFileEncrypted bool, err error) {
 	return isFileEncrypted, err
 }
 
+// createEncryptedFile creates a file with windows.FILE_ATTRIBUTE_ENCRYPTED file attribute.
 func createEncryptedFile(path string) (err error) {
 	var ptr *uint16
 	ptr, err = windows.UTF16PtrFromString(path)
 	if err == nil {
 		var handle windows.Handle
-		handle, err = windows.CreateFile(ptr, uint32(windows.GENERIC_READ|windows.GENERIC_WRITE), uint32(windows.FILE_SHARE_READ), nil, uint32(windows.CREATE_ALWAYS), uint32(windows.FILE_ATTRIBUTE_ENCRYPTED), 0)
+		handle, err = windows.CreateFile(ptr, uint32(windows.GENERIC_READ|windows.GENERIC_WRITE), uint32(windows.FILE_SHARE_READ), nil, uint32(windows.CREATE_ALWAYS), uint32(windows.FILE_ATTRIBUTE_ENCRYPTED|windows.FILE_ATTRIBUTE_COMPRESSED), 0)
 		if err == nil {
 			err = windows.CloseHandle(handle)
 		}
@@ -581,14 +584,14 @@ func GetOrCreateMutex(path string) *sync.Mutex {
 }
 
 // checkGenericAttributes checks for the required generic attributes
-func checkGenericAttributes(fileInfo *fileInfo, path string) (hasAdsValues []string, hasAds, isAds, isEncryptionNeeded bool) {
+func checkGenericAttributes(fileInfo *fileInfo, path string) (adsValues []string, hasAds, isAds, isEncryptionNeeded bool) {
 	attrs := fileInfo.attrs
 	if len(attrs) > 0 {
-		hasAdsBytes := restic.GetGenericAttribute(restic.TypeHasADS, attrs)
-		hasAdsString := string(hasAdsBytes)
-		hasAdsValues = strings.Split(hasAdsString, restic.AdsSeparator)
+		adsBytes := restic.GetGenericAttribute(restic.TypeHasADS, attrs)
+		adsString := string(adsBytes)
+		adsValues = strings.Split(adsString, restic.AdsSeparator)
 
-		hasAds = hasAdsBytes != nil
+		hasAds = adsBytes != nil
 		isAds = restic.GetGenericAttribute(restic.TypeIsADS, attrs) != nil
 		fileAttrBytes := restic.GetGenericAttribute(restic.TypeFileAttribute, attrs)
 		if len(fileAttrBytes) > 0 {
@@ -596,7 +599,7 @@ func checkGenericAttributes(fileInfo *fileInfo, path string) (hasAdsValues []str
 			isEncryptionNeeded = fileAttributes&windows.FILE_ATTRIBUTE_ENCRYPTED != 0
 		}
 	}
-	return hasAdsValues, hasAds, isAds, isEncryptionNeeded
+	return adsValues, hasAds, isAds, isEncryptionNeeded
 }
 
 // clearReadonly removes the readonly flag for the main file
