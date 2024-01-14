@@ -25,6 +25,7 @@ func lchown(_ string, uid int, gid int) (err error) {
 	return nil
 }
 
+// restoreSymlinkTimestamps restores timestamps for symlinks
 func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespec) error {
 	// tweaked version of UtimesNano from go/src/syscall/syscall_windows.go
 	pathp, e := syscall.UTF16PtrFromString(path)
@@ -100,7 +101,7 @@ func (s statT) ctim() syscall.Timespec {
 	return syscall.NsecToTimespec(s.LastWriteTime.Nanoseconds())
 }
 
-// restoreGenericAttributes restores generic attributes for windows
+// restoreGenericAttributes restores generic attributes for Windows
 func (node Node) restoreGenericAttributes(path string) (err error) {
 	for _, attr := range node.GenericAttributes {
 		if errGen := attr.restoreGenericAttribute(path); errGen != nil {
@@ -111,7 +112,7 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 	return err
 }
 
-// fillGenericAttributes fills in the generic attributes for windows like FileAttributes,
+// fillGenericAttributes fills in the generic attributes for windows like File Attributes,
 // Created time etc.
 func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
 	if strings.Contains(filepath.Base(path), ":") {
@@ -162,7 +163,7 @@ func UInt32ToBytes(value uint32) (bytes []byte) {
 	return bytes
 }
 
-// getFileAttributes gets the value for the GenericAttribute TypeCreationTime in a windows specific time format.
+// getCreationTime gets the value for the GenericAttribute TypeCreationTime in a windows specific time format.
 // The value is a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC)
 // split into two 32-bit parts: the low-order DWORD and the high-order DWORD for efficiency and interoperability.
 // The low-order DWORD represents the number of 100-nanosecond intervals elapsed since January 1, 1601, modulo
@@ -209,7 +210,7 @@ func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 	return nil
 }
 
-// handleFileAttributes gets the file attributes from the data and sets them to the file/folder
+// handleFileAttributes gets the File Attributes from the data and sets them to the file/folder
 // at the specified path.
 func handleFileAttributes(path string, data []byte) (err error) {
 	attrs := binary.LittleEndian.Uint32(data)
@@ -220,7 +221,7 @@ func handleFileAttributes(path string, data []byte) (err error) {
 	return syscall.SetFileAttributes(pathPointer, attrs)
 }
 
-// handleFileAttributes gets the creation time from the data and sets it to the file/folder at
+// handleCreationTime gets the creation time from the data and sets it to the file/folder at
 // the specified path.
 func handleCreationTime(path string, data []byte) (err error) {
 	pathPointer, err := syscall.UTF16PtrFromString(path)
