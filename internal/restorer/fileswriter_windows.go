@@ -112,7 +112,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 	return isAds, file, err
 }
 
-// handleCreateFile handles all the various combination of states while creating the file if needed
+// handleCreateFile handles all the various combination of states while creating the file if needed.
 func handleCreateFile(path string, mainPath string, fileIn *os.File, adsValues []string, isAdsRelated, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
 	if !isAdsRelated {
 		// This is the simplest case where ADS files are not involved.
@@ -125,7 +125,7 @@ func handleCreateFile(path string, mainPath string, fileIn *os.File, adsValues [
 	return file, err
 }
 
-// handleCreateFileNonAds handles all the various combination of states while creating the non-ads file if needed
+// handleCreateFileNonAds handles all the various combination of states while creating the non-ads file if needed.
 func handleCreateFileNonAds(path string, fileIn *os.File, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
 	// Deduce the secondary encryption handling flags
 	isSameEncryption, isAddEncryption, isRemoveEncryption := deduceEncryptionHandlingFlags(isAlreadyExists, isEncryptionNeeded, isAlreadyEncrypted)
@@ -144,7 +144,7 @@ func handleCreateFileNonAds(path string, fileIn *os.File, isEncryptionNeeded, is
 	return nil, errors.New("invalid case for create file non-ads")
 }
 
-// handleCreateFileNonAdsSameEncryption handles creation of non ads files where there is no change in encryption attribute
+// handleCreateFileNonAdsSameEncryption handles creation of non ads files where there is no change in encryption attribute.
 func handleCreateFileNonAdsSameEncryption(path string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
 	// This is the simple case. We do not need to change the encryption attribute.
 	if isAlreadyExists {
@@ -157,7 +157,7 @@ func handleCreateFileNonAdsSameEncryption(path string, fileIn *os.File, isAlread
 	}
 }
 
-// handleCreateFileNonAdsSameEncryption handles creation of non ads files where the encryption attribute needs to be added.
+// handleCreateFileNonAdsAddEncryption handles creation of non ads files where the encryption attribute needs to be added.
 func handleCreateFileNonAdsAddEncryption(path string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
 	// Encryption needs to be added
 	if isAlreadyExists {
@@ -182,7 +182,7 @@ func handleCreateFileNonAdsAddEncryption(path string, fileIn *os.File, isAlready
 	}
 }
 
-// handleCreateFileNonAdsSameEncryption handles creation of non ads files where the encryption attribute needs to be removed.
+// handleCreateFileNonAdsRemoveEncryption handles creation of non ads files where the encryption attribute needs to be removed.
 func handleCreateFileNonAdsRemoveEncryption(path string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
 	// Encryption needs to be removed
 	if isAlreadyExists {
@@ -203,7 +203,7 @@ func handleCreateFileNonAdsRemoveEncryption(path string, fileIn *os.File, isAlre
 	}
 }
 
-// handleCreateFileAds handles all the various combination of states while creating the ads related file if needed
+// handleCreateFileAds handles all the various combination of states while creating the ads related file if needed.
 func handleCreateFileAds(path string, mainPath string, fileIn *os.File, adsValues []string, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
 	// Deduce the secondary encryption handling flags
 	isSameEncryption, isAddEncryption, isRemoveEncryption := deduceEncryptionHandlingFlags(isAlreadyExists, isEncryptionNeeded, isAlreadyEncrypted)
@@ -237,7 +237,7 @@ func handleCreateFileAds(path string, mainPath string, fileIn *os.File, adsValue
 	return nil, errors.New("invalid case for create file ads")
 }
 
-// handleCreateFileNonAdsSameEncryption handles creation of non ads files where there is no change in encryption attribute
+// handleCreateFileAdsSameEncryption handles creation of ads files where there is no change in encryption attribute.
 func handleCreateFileAdsSameEncryption(path string, fileIn *os.File, hasAds, isAds, isEncryptionNeeded, isAlreadyExists bool) (file *os.File, err error) {
 	// This is the simple case. We do not need to change the encryption attribute.
 	if isAlreadyExists {
@@ -283,7 +283,7 @@ func handleCreateFileAdsSameEncryption(path string, fileIn *os.File, hasAds, isA
 	}
 }
 
-// handleCreateFileNonAdsSameEncryption handles creation of non ads files where the encryption attribute needs to be added.
+// handleCreateFileAdsAddEncryption handles creation of ads files where the encryption attribute needs to be added.
 func handleCreateFileAdsAddEncryption(path string, mainPath string, fileIn *os.File, isAds, isAlreadyExists bool) (file *os.File, err error) {
 	// Encryption needs to be added
 	if isAlreadyExists {
@@ -353,7 +353,7 @@ func handleCreateFileAdsAddEncryption(path string, mainPath string, fileIn *os.F
 	}
 }
 
-// handleCreateFileNonAdsSameEncryption handles creation of non ads files where the encryption attribute needs to be removed.
+// handleCreateFileAdsRemoveEncryption handles creation of ads files where the encryption attribute needs to be removed.
 func handleCreateFileAdsRemoveEncryption(path string, mainPath string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
 	// Encryption needs to be removed
 	if isAlreadyExists {
@@ -427,7 +427,7 @@ func removeExtraStreams(path string, adsValues []string, mainPath string) {
 	}
 }
 
-// filterItems filters out which items are in evalArray which are not in referenceArray
+// filterItems filters out which items are in evalArray which are not in referenceArray.
 func filterItems(referenceArray, evalArray []string) (result []string) {
 	// Create a map to store elements of referenceArray for fast lookup
 	referenceArrayMap := make(map[string]bool)
@@ -447,19 +447,19 @@ func filterItems(referenceArray, evalArray []string) (result []string) {
 	return result
 }
 
-// openFileWithCreate opens the file with os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY
+// openFileWithCreate opens the file with os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
 func openFileWithCreate(path string) (file *os.File, err error) {
 	flags := os.O_CREATE | os.O_TRUNC | os.O_WRONLY
 	return os.OpenFile(path, flags, 0600)
 }
 
-// openFileWithCreate opens the file without os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY
+// openFileWithCreate opens the file without os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
 func openFileWithoutCreate(path string) (file *os.File, err error) {
 	flags := os.O_TRUNC | os.O_WRONLY
 	return os.OpenFile(path, flags, 0600)
 }
 
-// deduceEncryptionHandlingFlags deduces the flags for encryption handling based on the passed in state flags.
+// deduceEncryptionHandlingFlags deduces the flags for encryption handling based on the passed state flags.
 func deduceEncryptionHandlingFlags(isAlreadyExists bool, isEncryptionNeeded bool, isAlreadyEncrypted bool) (isSameEncryption bool, isAddEncryption bool, isRemoveEncryption bool) {
 	if isAlreadyExists {
 		if isEncryptionNeeded {
@@ -489,7 +489,7 @@ func deduceEncryptionHandlingFlags(isAlreadyExists bool, isEncryptionNeeded bool
 	return isSameEncryption, isAddEncryption, isRemoveEncryption
 }
 
-// isFileEncrypted checks if file is encrypted
+// isFileEncrypted checks if file is encrypted.
 func isFileEncrypted(file *os.File) (isFileEncrypted bool, err error) {
 	var fi os.FileInfo
 	fi, err = file.Stat()
@@ -518,7 +518,7 @@ func createEncryptedFile(path string) (err error) {
 	return err
 }
 
-// removeAndCreateEncryptedFile removes the file before creating the file with encrypted attribute
+// removeAndCreateEncryptedFile removes the file before creating the file with encrypted attribute.
 func removeAndCreateEncryptedFile(path string) (err error) {
 	err = os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -543,7 +543,7 @@ func CleanupPath(path string) {
 	removeMutex(path)
 }
 
-// removeMutex removes the mutex for the specified path
+// removeMutex removes the mutex for the specified path.
 func removeMutex(path string) {
 	path = fs.TrimAds(path)
 	pathMutexMap.mu.Lock()
@@ -590,7 +590,7 @@ func GetOrCreateMutex(path string) *sync.Mutex {
 	return mutex
 }
 
-// checkGenericAttributes checks for the required generic attributes
+// checkGenericAttributes checks for the required generic attributes.
 func checkGenericAttributes(fileInfo *fileInfo, path string) (adsValues []string, hasAds, isAds, isEncryptionNeeded bool) {
 	attrs := fileInfo.attrs
 	if len(attrs) > 0 {
@@ -635,7 +635,7 @@ func clearReadonly(isAds bool, path string, file *os.File) error {
 	return nil
 }
 
-// isAccessDenied checks if the error is ERROR_ACCESS_DENIED or a Path error due to windows.ERROR_ACCESS_DENIED
+// isAccessDenied checks if the error is ERROR_ACCESS_DENIED or a Path error due to windows.ERROR_ACCESS_DENIED.
 func isAccessDenied(err error) bool {
 	isAccessDenied := isAccessDeniedError(err)
 	if !isAccessDenied {
@@ -646,12 +646,12 @@ func isAccessDenied(err error) bool {
 	return isAccessDenied
 }
 
-// isAccessDeniedError checks if the error is ERROR_ACCESS_DENIED
+// isAccessDeniedError checks if the error is ERROR_ACCESS_DENIED.
 func isAccessDeniedError(err error) bool {
 	return fs.IsErrorOfType(err, windows.ERROR_ACCESS_DENIED)
 }
 
-// isReadonly checks if the fileAtributes have readonly bit
+// isReadonly checks if the fileAtributes have readonly bit.
 func isReadonly(fileAttributes uint32) bool {
 	return fileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0
 }
