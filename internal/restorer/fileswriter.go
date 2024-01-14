@@ -88,6 +88,9 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 
 		if bucket.files[path].users == 1 {
 			delete(bucket.files, path)
+
+			//Remove the mutex
+			RemoveMutex(path)
 			return wr.Close()
 		}
 		bucket.files[path].users--
