@@ -171,7 +171,7 @@ func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Generic
 }
 
 // restoreGenericAttribute restores the generic attributes for windows like File Attributes,
-// Created time and Security Descriptors.
+// Created time etc.
 func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 	switch attr.Name {
 	case string(TypeFileAttribute):
