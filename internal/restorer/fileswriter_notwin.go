@@ -28,6 +28,6 @@ func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (fil
 }
 
 // CleanupPath performs clean up for the specified path.
-func CleanupPath(path string) {
+func CleanupPath(_ string) {
 	// no-op
 }
