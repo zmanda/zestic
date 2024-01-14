@@ -537,8 +537,13 @@ type PathMutexMap struct {
 	mutex map[string]*sync.Mutex
 }
 
-// RemoveMutex removes the mutex for the specified path
-func RemoveMutex(path string) {
+// CleanupPath performs clean up for the specified path.
+func CleanupPath(path string) {
+	removeMutex(path)
+}
+
+// removeMutex removes the mutex for the specified path
+func removeMutex(path string) {
 	path = fs.TrimAds(path)
 	pathMutexMap.mu.Lock()
 	defer pathMutexMap.mu.Unlock()
@@ -547,8 +552,9 @@ func RemoveMutex(path string) {
 	delete(pathMutexMap.mutex, path)
 }
 
-// Clear clears all the mutexes in the map
-func Clear() {
+// Cleanup performs cleanup for all paths.
+// It clears all the mutexes in the map.
+func Cleanup() {
 	pathMutexMap.mu.Lock()
 	defer pathMutexMap.mu.Unlock()
 	// Iterate over the map and remove each mutex

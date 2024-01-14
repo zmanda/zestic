@@ -26,3 +26,8 @@ func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (fil
 	file, err = os.OpenFile(path, flags, 0600)
 	return file, err
 }
+
+// CleanupPath performs clean up for the specified path.
+func CleanupPath(path string) {
+	// no-op
+}
