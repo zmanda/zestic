@@ -72,9 +72,9 @@ func Setxattr(path, name string, data []byte) error {
 
 type statT syscall.Win32FileAttributeData
 
-// ToStatT converts the OS dependent stat like *syscall.Win32FileAttributeData in windows to a
+// toStatT converts the OS dependent stat like *syscall.Win32FileAttributeData in windows to a
 // *restic.statT of type syscall.Win32FileAttributeData for windows.
-func ToStatT(i interface{}) (*statT, bool) {
+func toStatT(i interface{}) (*statT, bool) {
 	s, ok := i.(*syscall.Win32FileAttributeData)
 	if ok && s != nil {
 		return (*statT)(s), true

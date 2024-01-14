@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/fs"
@@ -493,8 +494,8 @@ func isFileEncrypted(file *os.File) (isFileEncrypted bool, err error) {
 	var fi os.FileInfo
 	fi, err = file.Stat()
 	if err == nil {
-		stat, ok := restic.ToStatT(fi.Sys())
-		if ok {
+		stat, ok := (fi.Sys()).(*syscall.Win32FileAttributeData)
+		if ok && stat != nil {
 			fileAttributes := stat.FileAttributes
 
 			isFileEncrypted = fileAttributes&windows.FILE_ATTRIBUTE_ENCRYPTED != 0

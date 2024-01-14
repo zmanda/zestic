@@ -728,7 +728,7 @@ func lookupGroup(gid uint32) string {
 }
 
 func (node *Node) fillExtra(path string, fi os.FileInfo) error {
-	stat, ok := ToStatT(fi.Sys())
+	stat, ok := toStatT(fi.Sys())
 	if !ok {
 		// fill minimal info with current values for uid, gid
 		node.UID = uint32(os.Getuid())
