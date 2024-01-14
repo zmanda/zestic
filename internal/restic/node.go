@@ -63,6 +63,7 @@ func (ga *GenericAttribute) GetValue() []byte {
 // GenericAttributeType can be used for OS specific functionalities by defining specific types in each specific node_xx file.
 type GenericAttributeType string
 
+// OSType is the type created to represent each specific OS
 type OSType string
 
 const (
@@ -791,7 +792,7 @@ func (node *Node) fillTimes(stat *statT) {
 	node.AccessTime = time.Unix(atim.Unix())
 }
 
-// handleUnknownGenericAttributeFound is used for handling future versions and cross-OS repositories
+// handleUnknownGenericAttributeFound is used for handling and distinguing between scenarios related to future versions and cross-OS repositories
 func handleUnknownGenericAttributeFound(genericAttributeName string) {
 	if checkGenericAttributeNameNotHandledAndPut(genericAttributeName) {
 		// Print the unique error only once for a given execution
@@ -799,7 +800,7 @@ func handleUnknownGenericAttributeFound(genericAttributeName string) {
 
 		if exists {
 			//If genericAttributesForOS contains an entry but we still got here, it means the specific node_xx.go for the current OS did not handle it and the repository may have been originally created on a different OS.
-			//The fact the node.go knows about the attribute, means it is not a new attribute. This may be a common situation if a repo is used across OSs.
+			//The fact that node.go knows about the attribute, means it is not a new attribute. This may be a common situation if a repo is used across OSs.
 			debug.Log("Ignoring a generic attribute found in the repository: %s which may not be compatible with your OS. Compatible OS: %v", genericAttributeName, value)
 		} else {
 			//If genericAttributesForOS in node.go does not know about this attribute, then the repository may have been created by a newer version which has a newer GenericAttributeType.
@@ -822,10 +823,11 @@ var unknownGenericAttributesHandlingHistory = map[string]string{}
 func checkGenericAttributeNameNotHandledAndPut(value string) bool {
 	// Check if the key exists
 	if _, ok := unknownGenericAttributesHandlingHistory[value]; ok {
-		return false // Key exists, then it is already handled so return false
+		// Key exists, then it is already handled so return false
+		return false
 	}
 
-	// Key doesn't exist, put the value and return true because it is already handled
+	// Key doesn't exist, put the value and return true because it is not already handled
 	unknownGenericAttributesHandlingHistory[value] = ""
 	return true
 }

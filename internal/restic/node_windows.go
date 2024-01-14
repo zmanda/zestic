@@ -28,6 +28,7 @@ func lchown(_ string, uid int, gid int) (err error) {
 	return nil
 }
 
+// restoreSymlinkTimestamps restores timestamps for symlinks
 func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespec) error {
 	// tweaked version of UtimesNano from go/src/syscall/syscall_windows.go
 	pathp, e := syscall.UTF16PtrFromString(path)
@@ -176,7 +177,7 @@ func (node *Node) fillExtendedAttributes(path string) (err error) {
 	return nil
 }
 
-// restoreGenericAttributes restores generic attributes for windows
+// restoreGenericAttributes restores generic attributes for Windows
 func (node Node) restoreGenericAttributes(path string) (err error) {
 	for _, attr := range node.GenericAttributes {
 		if errGen := attr.restoreGenericAttribute(path); errGen != nil {
@@ -187,8 +188,8 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 	return err
 }
 
-// fillGenericAttributes fills in the generic attributes for windows like FileAttributes,
-// Created time and SecurityDescriptor.
+// fillGenericAttributes fills in the generic attributes for windows like File Attributes,
+// Created time, Security Descriptor etc.
 func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
 	// Add Is Ads
 	isAds, isAdsAttribute := getIsAds(path)
@@ -231,24 +232,32 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 	}
 }
 
+// appendGenericAttribute appends a GenericAttribute to the node
 func (node *Node) appendGenericAttribute(genericAttribute GenericAttribute) {
 	if genericAttribute.Name != "" {
 		node.GenericAttributes = append(node.GenericAttributes, genericAttribute)
 	}
 }
 
+// getFileAttributes gets the value for the GenericAttribute TypeFileAttribute
 func getFileAttributes(fileattr uint32) (fileAttribute GenericAttribute) {
 	fileAttrData := UInt32ToBytes(fileattr)
 	fileAttribute = NewGenericAttribute(TypeFileAttribute, fileAttrData)
 	return fileAttribute
 }
 
+// UInt32ToBytes converts a uint32 value to a byte array
 func UInt32ToBytes(value uint32) (bytes []byte) {
 	bytes = make([]byte, 4)
 	binary.LittleEndian.PutUint32(bytes, value)
 	return bytes
 }
 
+// getCreationTime gets the value for the GenericAttribute TypeCreationTime in a windows specific time format.
+// The value is a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC)
+// split into two 32-bit parts: the low-order DWORD and the high-order DWORD for efficiency and interoperability.
+// The low-order DWORD represents the number of 100-nanosecond intervals elapsed since January 1, 1601, modulo
+// 2^32. The high-order DWORD represents the number of times the low-order DWORD has overflowed.
 func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute GenericAttribute) {
 	attrib, success := fi.Sys().(*syscall.Win32FileAttributeData)
 	if success && attrib != nil {
@@ -262,6 +271,9 @@ func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Generic
 	return creationTimeAttribute
 }
 
+// getSecurityDescriptor function retrieves the GenericAttribute containing the byte representation
+// of the Security Descriptor. This byte representation is obtained from the encoded string form of
+// the raw binary Security Descriptor associated with the Windows file or folder.
 func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error) {
 	sd, err := fs.GetFileSecurityDescriptor(path)
 	if err != nil {
@@ -298,7 +310,7 @@ func getIsAds(path string) (IsAds bool, isAdsAttribute GenericAttribute) {
 }
 
 // restoreExtendedAttributes handles restore of the Windows Extended Attributes to the specified path.
-// The windows api requires setting of all the extended attributes in one call.
+// The Windows API requires setting of all the Extended Attributes in one call.
 func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute) (err error) {
 	var fileHandle windows.Handle
 	switch nodeType {
@@ -327,8 +339,8 @@ func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute
 	return err
 }
 
-// restoreGenericAttribute restores the generic attributes for windows like File Attributes,
-// Created time and Security Descriptors.
+// restoreGenericAttribute restores the generic attributes for Windows like File Attributes,
+// Created time, Security Descriptor etc.
 func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 	switch attr.Name {
 	case string(TypeFileAttribute):
@@ -348,6 +360,8 @@ func (attr GenericAttribute) restoreGenericAttribute(path string) error {
 	return nil
 }
 
+// handleFileAttributes gets the File Attributes from the data and sets them to the file/folder
+// at the specified path.
 func handleFileAttributes(path string, data []byte) (err error) {
 	attrs := binary.LittleEndian.Uint32(data)
 	pathPointer, err := syscall.UTF16PtrFromString(path)
@@ -357,6 +371,8 @@ func handleFileAttributes(path string, data []byte) (err error) {
 	return syscall.SetFileAttributes(pathPointer, attrs)
 }
 
+// handleCreationTime gets the creation time from the data and sets it to the file/folder at
+// the specified path.
 func handleCreationTime(path string, data []byte) (err error) {
 	pathPointer, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
@@ -387,6 +403,8 @@ func handleCreationTime(path string, data []byte) (err error) {
 	return nil
 }
 
+// handleSecurityDescriptor gets the Security Descriptor from the data and sets it to the file/folder at
+// the specified path.
 func handleSecurityDescriptor(path string, data []byte) error {
 	sd := string(data)
 
