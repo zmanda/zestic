@@ -490,8 +490,7 @@ func deduceEncryptionHandlingFlags(isAlreadyExists bool, isEncryptionNeeded bool
 		}
 	} else {
 		isAddEncryption = isEncryptionNeeded
-		isRemoveEncryption = !isEncryptionNeeded
-		// isSameEncryption is false because file hasn't been created yet
+		// isSameEncryption and isRemoveEncryption is false because file hasn't been created yet
 	}
 	return isSameEncryption, isAddEncryption, isRemoveEncryption
 }
