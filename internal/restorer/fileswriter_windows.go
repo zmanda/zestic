@@ -131,7 +131,7 @@ func handleCreateFileNonAds(path string, fileIn *os.File, isEncryptionNeeded, is
 	isSameEncryption, isAddEncryption, isRemoveEncryption := deduceEncryptionHandlingFlags(isAlreadyExists, isEncryptionNeeded, isAlreadyEncrypted)
 
 	if isSameEncryption {
-		return handleCreateFileNonAdsSameEncryption(path, fileIn, isAlreadyExists)
+		return handleCreateFileNonAdsSameEncryption(path, fileIn, isEncryptionNeeded, isAlreadyExists)
 	}
 
 	if isAddEncryption {
@@ -145,7 +145,7 @@ func handleCreateFileNonAds(path string, fileIn *os.File, isEncryptionNeeded, is
 }
 
 // handleCreateFileNonAdsSameEncryption handles creation of non ads files where there is no change in encryption attribute.
-func handleCreateFileNonAdsSameEncryption(path string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
+func handleCreateFileNonAdsSameEncryption(path string, fileIn *os.File, isEncryptionNeeded, isAlreadyExists bool) (file *os.File, err error) {
 	// This is the simple case. We do not need to change the encryption attribute.
 	if isAlreadyExists {
 		// If the non-ads file already exists and no change to encryption, return the file
@@ -489,9 +489,10 @@ func deduceEncryptionHandlingFlags(isAlreadyExists bool, isEncryptionNeeded bool
 			}
 		}
 	} else {
-		isSameEncryption = true
-		// isSameEncryption is true because there is no change to existing file encryption, it does not exist.
-		// isAddEncryption and isRemoveEncryption is false because file hasn't been created yet.
+		isSameEncryption = !isEncryptionNeeded
+		isAddEncryption = isEncryptionNeeded
+		// isSameEncryption should be used if file is not encrypted, cause no encryption needs to be added or removed.
+		// isAddEncryption is needed if encryption needs to be added.
 	}
 	return isSameEncryption, isAddEncryption, isRemoveEncryption
 }
