@@ -517,7 +517,7 @@ func createEncryptedFile(path string) (err error) {
 	ptr, err = windows.UTF16PtrFromString(path)
 	if err == nil {
 		var handle windows.Handle
-		handle, err = windows.CreateFile(ptr, uint32(windows.GENERIC_READ|windows.GENERIC_WRITE), uint32(windows.FILE_SHARE_READ), nil, uint32(windows.CREATE_ALWAYS), uint32(windows.FILE_ATTRIBUTE_ENCRYPTED|windows.FILE_ATTRIBUTE_COMPRESSED), 0)
+		handle, err = windows.CreateFile(ptr, uint32(windows.GENERIC_READ|windows.GENERIC_WRITE), uint32(windows.FILE_SHARE_READ), nil, uint32(windows.CREATE_ALWAYS), uint32(windows.FILE_ATTRIBUTE_ENCRYPTED), 0)
 		if err == nil {
 			err = windows.CloseHandle(handle)
 		}
