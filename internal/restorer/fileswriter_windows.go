@@ -381,6 +381,8 @@ func removeExistingAndCreateEncryptionStateFileIfNeeded(fileIn *os.File, isAdsFi
 
 		if !isAdsFileIn && isAds {
 			// This means fileIn is the main file, and the file being processed is ads.
+			// First close the main file.
+			fileIn.Close()
 			// Main file is already encrypted, so just create the ads file.
 			return openFileWithCreate(path)
 		} else {
