@@ -81,7 +81,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 			return isAds, nil, err
 		}
 		// First check if file already exists
-		file, err = openFileWithoutCreate(path)
+		file, err = openFileWithTruncWrite(path)
 		if err == nil {
 			// File already exists
 			isAlreadyExists = true
@@ -171,14 +171,14 @@ func handleCreateFileNonAdsAddEncryption(path string, fileIn *os.File, isAlready
 		if err != nil {
 			return nil, err
 		}
-		return openFileWithoutCreate(path)
+		return openFileWithWriteOnly(path)
 	} else {
 		// File doesn't already exist, so we can simply create it with the encryption attribute.
 		err = createEncryptedFile(path)
 		if err != nil {
 			return nil, err
 		}
-		return openFileWithoutCreate(path)
+		return openFileWithWriteOnly(path)
 	}
 }
 
@@ -253,7 +253,7 @@ func handleCreateFileAdsSameEncryption(path string, fileIn *os.File, hasAds, isA
 		if hasAds {
 			// If it is the main file which has ads files attached, we will check again if the main file wasn't created
 			// since we synced.
-			file, err = openFileWithoutCreate(path)
+			file, err = openFileWithTruncWrite(path)
 			if err != nil {
 				if os.IsNotExist(err) {
 					// We confirmed that the main file still doesn't exist after syncing.
@@ -265,7 +265,7 @@ func handleCreateFileAdsSameEncryption(path string, fileIn *os.File, hasAds, isA
 							return nil, err
 						}
 						// Then open the main file without create option
-						return openFileWithoutCreate(path)
+						return openFileWithTruncWrite(path)
 					} else {
 						// Directly open the main file with create option as it should not be encrypted.
 						return openFileWithCreate(path)
@@ -309,13 +309,14 @@ func handleCreateFileAdsAddOrRemoveEncryption(path, mainPath string, fileIn *os.
 	// The isAlreadyExists and isEncrypted checks were done before locking.
 	// Hence, we need to check again if the file was recreated with/without the encryption flag before
 	// trying to remove it, because this would be called concurrently by the other streams.
-	file, err = openFileWithoutCreate(path)
+	file, err = openFileWithTruncWrite(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// We confirmed that the path does not exist.
 			if isAds {
 				// If this is an ads stream, still need to check if main file exists.
-				file, err = openFileWithoutCreate(mainPath)
+				// We do not want to truncate while checking because main file writing could have started already.
+				file, err = openFileWithWriteOnly(mainPath)
 				//remove check and create
 				if err == nil {
 					// Main file exists, and ads does not exist.
@@ -337,7 +338,7 @@ func handleCreateFileAdsAddOrRemoveEncryption(path, mainPath string, fileIn *os.
 			}
 			// This is main file and since it was just created, we just need to open the file
 			// without create flag.
-			return openFileWithoutCreate(path)
+			return openFileWithWriteOnly(path)
 
 		} else {
 			// Error other than IsNotExist occured, so stop processing and return it.
@@ -360,8 +361,8 @@ func createAdsRelatedFile(isAds bool, path string) (file *os.File, err error) {
 		return openFileWithCreate(path)
 	} else {
 		// If this is main file, then since it was just created, we just need to open the file
-		// without create flag.
-		return openFileWithoutCreate(path)
+		// with write flag.
+		return openFileWithWriteOnly(path)
 	}
 }
 
@@ -461,8 +462,14 @@ func openFileWithCreate(path string) (file *os.File, err error) {
 }
 
 // openFileWithCreate opens the file without os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
-func openFileWithoutCreate(path string) (file *os.File, err error) {
+func openFileWithTruncWrite(path string) (file *os.File, err error) {
 	flags := os.O_TRUNC | os.O_WRONLY
+	return os.OpenFile(path, flags, 0600)
+}
+
+// openFileWithWriteOnly opens the file with os.O_WRONLY flag.
+func openFileWithWriteOnly(path string) (file *os.File, err error) {
+	flags := os.O_WRONLY
 	return os.OpenFile(path, flags, 0600)
 }
 
