@@ -450,7 +450,7 @@ func handleFileAttributes(path string, data []byte) (err error) {
 		return err
 	}
 
-	if attrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
+	if attrs&windows.FILE_ATTRIBUTE_DIRECTORY != 0 && attrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
 		err = encryptFile(pathPointer)
 		if err != nil {
 			return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
