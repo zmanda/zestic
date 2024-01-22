@@ -170,7 +170,7 @@ func (res *Restorer) restoreNodeTo(ctx context.Context, node *restic.Node, targe
 	}
 
 	if res.progress != nil {
-		res.progress.AddProgress(location, 0, 0)
+		res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 	}
 
 	return res.restoreNodeMetadataTo(node, target, location)
@@ -195,7 +195,7 @@ func (res *Restorer) restoreHardlinkAt(node *restic.Node, target, path, location
 	}
 
 	if res.progress != nil {
-		res.progress.AddProgress(location, 0, 0)
+		res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 	}
 
 	// TODO investigate if hardlinks have separate metadata on any supported system
@@ -213,7 +213,7 @@ func (res *Restorer) restoreEmptyFileAt(node *restic.Node, target, location stri
 	}
 
 	if res.progress != nil {
-		res.progress.AddProgress(location, 0, 0)
+		res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 	}
 
 	return res.restoreNodeMetadataTo(node, target, location)
@@ -328,21 +328,12 @@ func (res *Restorer) RestoreTo(ctx context.Context, dst string) error {
 		leaveDir: func(node *restic.Node, target, location string) error {
 			err := res.restoreNodeMetadataTo(node, target, location)
 			if err == nil && res.progress != nil {
-				res.progress.AddProgress(location, 0, 0)
+				res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 			}
 			return err
 		},
 	})
 	return err
-}
-
-func (res *Restorer) addFile(node *restic.Node, size uint64) {
-	if fs.IsMainFile(node.Name) {
-		res.progress.AddFile(size)
-	} else {
-		// If this is not the main file, we just want to update the size and not the count.
-		res.progress.AddSize(size)
-	}
 }
 
 // Snapshot returns the snapshot this restorer is configured to use.

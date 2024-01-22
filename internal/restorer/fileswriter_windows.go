@@ -8,7 +8,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/fs"
 	"github.com/restic/restic/internal/restic"
 	"golang.org/x/sys/windows"
@@ -36,9 +35,11 @@ import (
 func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInfo) (file *os.File, err error) {
 	var isAds bool
 	isAds, file, err = fw.openFileImpl(createSize, path, fileInfo)
-	if err != nil && isAccessDenied(err) {
+	if err != nil && fs.IsAccessDenied(err) {
 		// Access is denied, remove readonly and try again.
-		err = clearReadonly(isAds, path, file)
+		// ClearReadonly removes the readonly flag from the main file
+		// as it will be set again while applying metadata in the next pass if required.
+		err = fs.ClearReadonly(isAds, path)
 		if err == nil {
 			_, file, err = fw.openFileImpl(createSize, path, fileInfo)
 			if err != nil {
@@ -58,7 +59,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 		//Define all the flags
 		var hasAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool
 		var adsValues []string
-		adsValues, hasAds, isAds, isEncryptionNeeded = checkGenericAttributes(fileInfo, path)
+		adsValues, hasAds, isAds, isEncryptionNeeded = checkGenericAttributes(fileInfo.attrs)
 
 		// This means that this is an ads related file. It either has ads streams or is an ads streams
 		isAdsRelated := hasAds || isAds
@@ -210,28 +211,28 @@ func handleCreateFileAds(path string, mainPath string, fileIn *os.File, adsValue
 
 	if isSameEncryption {
 		file, err = handleCreateFileAdsSameEncryption(path, fileIn, hasAds, isAds, isEncryptionNeeded, isAlreadyExists)
-		if hasAds && isAlreadyExists {
-			//check which streams need to be removed and remove the extra streams
-			removeExtraStreams(path, adsValues, mainPath)
-		}
+		// if hasAds && isAlreadyExists {
+		// 	//check which streams need to be removed and remove the extra streams
+		// 	removeExtraStreams(path, adsValues, mainPath)
+		// }
 		return file, err
 	}
 
 	if isAddEncryption {
 		file, err = handleCreateFileAdsAddEncryption(path, mainPath, fileIn, isAds, isAlreadyExists)
-		if hasAds && isAlreadyExists {
-			//check which streams need to be removed and remove the extra streams
-			removeExtraStreams(path, adsValues, mainPath)
-		}
+		// if hasAds && isAlreadyExists {
+		// 	//check which streams need to be removed and remove the extra streams
+		// 	removeExtraStreams(path, adsValues, mainPath)
+		// }
 		return file, err
 	}
 
 	if isRemoveEncryption {
 		file, err = handleCreateFileAdsRemoveEncryption(path, mainPath, fileIn, isAds, isAlreadyExists)
-		if hasAds && isAlreadyExists {
-			//check which streams need to be removed and remove the extra streams
-			removeExtraStreams(path, adsValues, mainPath)
-		}
+		// if hasAds && isAlreadyExists {
+		// 	//check which streams need to be removed and remove the extra streams
+		// 	removeExtraStreams(path, adsValues, mainPath)
+		// }
 		return file, err
 	}
 	return nil, errors.New("invalid case for create file ads")
@@ -322,6 +323,8 @@ func handleCreateFileAdsAddOrRemoveEncryption(path, mainPath string, fileIn *os.
 					// Main file exists, and ads does not exist.
 					// Here we know file is for the main file so we pass isAdsFileIn as false.
 					return removeExistingAndCreateEncryptionStateFileIfNeeded(file, false, isAds, isEncryptionNeeded, path, mainPath)
+				} else if errors.Is(err, syscall.EISDIR) { // If main file is a directory then we can just create the file ads
+					return createAdsRelatedFile(isAds, path)
 				} else if !os.IsNotExist(err) {
 					// Error other than IsNotExist occured, so stop processing and return it.
 					return nil, err
@@ -419,42 +422,6 @@ func removeAndCreateEncryptedFileAndOpen(isAds bool, path, mainPath string) (fil
 		return nil, err
 	}
 	return createAdsRelatedFile(isAds, path)
-}
-
-// removeExtraStreams removes any extra streams on the file which are not present in the
-// backed up state in the generic attribute TypeHasAds.
-func removeExtraStreams(path string, adsValues []string, mainPath string) {
-	success, existingStreams, _ := fs.GetADStreamNames(path)
-	if success {
-		extraStreams := filterItems(adsValues, existingStreams)
-		for _, extraStream := range extraStreams {
-			streamToRemove := mainPath + extraStream
-			err := os.Remove(streamToRemove)
-			if err != nil {
-				debug.Log("Error removing stream: %s : %s", streamToRemove, err)
-			}
-		}
-	}
-}
-
-// filterItems filters out which items are in evalArray which are not in referenceArray.
-func filterItems(referenceArray, evalArray []string) (result []string) {
-	// Create a map to store elements of referenceArray for fast lookup
-	referenceArrayMap := make(map[string]bool)
-	for _, item := range referenceArray {
-		referenceArrayMap[item] = true
-	}
-
-	// Iterate through elements of evalArray
-	for _, item := range evalArray {
-		// Check if the item is not in referenceArray
-		if !referenceArrayMap[item] {
-			// Append to the result array
-			result = append(result, item)
-		}
-	}
-
-	return result
 }
 
 // openFileWithCreate opens the file with os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
@@ -608,8 +575,7 @@ func GetOrCreateMutex(path string) *sync.Mutex {
 }
 
 // checkGenericAttributes checks for the required generic attributes.
-func checkGenericAttributes(fileInfo *fileInfo, path string) (adsValues []string, hasAds, isAds, isEncryptionNeeded bool) {
-	attrs := fileInfo.attrs
+func checkGenericAttributes(attrs []restic.GenericAttribute) (adsValues []string, hasAds, isAds, isEncryptionNeeded bool) {
 	if len(attrs) > 0 {
 		adsBytes := restic.GetGenericAttribute(restic.TypeHasADS, attrs)
 		adsString := string(adsBytes)
@@ -624,51 +590,4 @@ func checkGenericAttributes(fileInfo *fileInfo, path string) (adsValues []string
 		}
 	}
 	return adsValues, hasAds, isAds, isEncryptionNeeded
-}
-
-// clearReadonly removes the readonly flag for the main file
-// as it will be set again while applying metadata in the next pass if required.
-func clearReadonly(isAds bool, path string, file *os.File) error {
-	if isAds {
-		// If this is an ads stream we need to get the main file for setting attributes.
-		path = fs.TrimAds(path)
-	}
-	ptr, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return err
-	}
-	fileAttributes, err := windows.GetFileAttributes(ptr)
-	if err != nil {
-		return err
-	}
-	if isReadonly(fileAttributes) {
-		// Clear FILE_ATTRIBUTE_READONLY flag
-		fileAttributes &= ^uint32(windows.FILE_ATTRIBUTE_READONLY)
-		err = windows.SetFileAttributes(ptr, fileAttributes)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// isAccessDenied checks if the error is ERROR_ACCESS_DENIED or a Path error due to windows.ERROR_ACCESS_DENIED.
-func isAccessDenied(err error) bool {
-	isAccessDenied := isAccessDeniedError(err)
-	if !isAccessDenied {
-		if e, ok := err.(*os.PathError); ok {
-			isAccessDenied = isAccessDeniedError(e.Err)
-		}
-	}
-	return isAccessDenied
-}
-
-// isAccessDeniedError checks if the error is ERROR_ACCESS_DENIED.
-func isAccessDeniedError(err error) bool {
-	return fs.IsErrorOfType(err, windows.ERROR_ACCESS_DENIED)
-}
-
-// isReadonly checks if the fileAtributes have readonly bit.
-func isReadonly(fileAttributes uint32) bool {
-	return fileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0
 }

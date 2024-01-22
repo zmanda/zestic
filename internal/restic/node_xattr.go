@@ -52,6 +52,15 @@ func handleXattrErr(err error) error {
 	}
 }
 
+// RestoreMetadata restores node metadata
+func (node Node) RestoreMetadata(path string) (err error) {
+	err = node.restoreMetadata(path)
+	if err != nil {
+		debug.Log("restoreMetadata(%s) error %v", path, err)
+	}
+	return err
+}
+
 // restoreExtendedAttributes restores Extended Attributes
 func (node Node) restoreExtendedAttributes(path string) error {
 	for _, attr := range node.ExtendedAttributes {

@@ -6,6 +6,8 @@ package restic
 import (
 	"os"
 	"syscall"
+
+	"github.com/restic/restic/internal/debug"
 )
 
 func (node Node) restoreSymlinkTimestamps(_ string, _ [2]syscall.Timespec) error {
@@ -22,6 +24,15 @@ func toTimespec(t syscall.StTimespec_t) syscall.Timespec {
 func (s statT) atim() syscall.Timespec { return toTimespec(s.Atim) }
 func (s statT) mtim() syscall.Timespec { return toTimespec(s.Mtim) }
 func (s statT) ctim() syscall.Timespec { return toTimespec(s.Ctim) }
+
+// RestoreMetadata restores node metadata
+func (node Node) RestoreMetadata(path string) (err error) {
+	err = node.restoreMetadata(path)
+	if err != nil {
+		debug.Log("restoreMetadata(%s) error %v", path, err)
+	}
+	return err
+}
 
 // restoreExtendedAttributes is a no-op on AIX.
 func (node Node) restoreExtendedAttributes(_ string) error {

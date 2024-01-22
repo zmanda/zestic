@@ -78,17 +78,56 @@ func Chmod(name string, mode os.FileMode) error {
 	return os.Chmod(fixpath(name), mode)
 }
 
-// IsMainFile specifies if this is the main file or a secondary attached file (like ADS in case of windows)
-// This is used for functionalities we want to skip for secondary (ads) files.
-// Eg. For Windows we do not want to count the secondary files
-func IsMainFile(name string) bool {
-	return !IsAds(name)
-}
-
 // SanitizeMainFileName will only keep the main file and remove the secondary file like ADS from the name.
 func SanitizeMainFileName(str string) string {
 	// The ADS is essentially a part of the main file. So for any functionality that
 	// needs to consider the main file, like filtering, we need to derive the main file name
 	// from the ADS name.
 	return TrimAds(str)
+}
+
+// IsAccessDenied checks if the error is ERROR_ACCESS_DENIED or a Path error due to windows.ERROR_ACCESS_DENIED.
+func IsAccessDenied(err error) bool {
+	isAccessDenied := IsAccessDeniedError(err)
+	if !isAccessDenied {
+		if e, ok := err.(*os.PathError); ok {
+			isAccessDenied = IsAccessDeniedError(e.Err)
+		}
+	}
+	return isAccessDenied
+}
+
+// IsAccessDeniedError checks if the error is ERROR_ACCESS_DENIED.
+func IsAccessDeniedError(err error) bool {
+	return IsErrorOfType(err, windows.ERROR_ACCESS_DENIED)
+}
+
+// IsReadonly checks if the fileAtributes have readonly bit.
+func IsReadonly(fileAttributes uint32) bool {
+	return fileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0
+}
+
+// ClearReadonly removes the readonly flag from the main file.
+func ClearReadonly(isAds bool, path string) error {
+	if isAds {
+		// If this is an ads stream we need to get the main file for setting attributes.
+		path = TrimAds(path)
+	}
+	ptr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	fileAttributes, err := windows.GetFileAttributes(ptr)
+	if err != nil {
+		return err
+	}
+	if IsReadonly(fileAttributes) {
+		// Clear FILE_ATTRIBUTE_READONLY flag
+		fileAttributes &= ^uint32(windows.FILE_ATTRIBUTE_READONLY)
+		err = windows.SetFileAttributes(ptr, fileAttributes)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
 
 	"github.com/restic/restic/internal/fs"
 
@@ -18,9 +19,25 @@ import (
 
 const AdsSeparator = "|"
 
+var (
+	modAdvapi32     = syscall.NewLazyDLL("advapi32.dll")
+	procEncryptFile = modAdvapi32.NewProc("EncryptFileW")
+)
+
 // mknod is not supported on Windows.
 func mknod(_ string, mode uint32, dev uint64) (err error) {
 	return errors.New("device nodes cannot be created on windows")
+}
+
+// encryptFile set the encrypted flag on the file.
+func encryptFile(pathPointer *uint16) error {
+	// Call EncryptFile function
+	ret, _, err := procEncryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
+	if ret == 0 {
+		return err
+	}
+
+	return nil
 }
 
 // Windows doesn't need lchown
@@ -104,6 +121,68 @@ func (s statT) mtim() syscall.Timespec {
 func (s statT) ctim() syscall.Timespec {
 	// Windows does not have the concept of a "change time" in the sense Unix uses it, so we're using the LastWriteTime here.
 	return s.mtim()
+}
+
+// RestoreMetadata restores node metadata
+func (node Node) RestoreMetadata(path string) (err error) {
+	if node.IsMainFile() {
+		node.removeExtraStreams(path)
+		err = node.restoreMetadata(path)
+		if err != nil {
+			debug.Log("restoreMetadata(%s) error %v", path, err)
+		}
+	}
+	return err
+}
+
+// IsMainFile indicates if this is the main file and not a secondary file like an ads stream.
+// This is used for functionalities we want to skip for secondary (ads) files.
+// Eg. For Windows we do not want to count the secondary files
+func (node Node) IsMainFile() bool {
+	return node.GetGenericAttribute(TypeIsADS) == nil
+}
+
+// removeExtraStreams removes any extra streams on the file which are not present in the
+// backed up state in the generic attribute TypeHasAds.
+func (node Node) removeExtraStreams(path string) {
+	success, existingStreams, _ := fs.GetADStreamNames(path)
+	if success {
+		var adsValues []string
+
+		hasAdsBytes := node.GetGenericAttribute(TypeHasADS)
+		if hasAdsBytes != nil {
+			adsString := string(hasAdsBytes)
+			adsValues = strings.Split(adsString, AdsSeparator)
+		}
+
+		extraStreams := filterItems(adsValues, existingStreams)
+		for _, extraStream := range extraStreams {
+			streamToRemove := path + extraStream
+			err := os.Remove(streamToRemove)
+			if err != nil {
+				debug.Log("Error removing stream: %s : %s", streamToRemove, err)
+			}
+		}
+	}
+}
+
+// filterItems filters out which items are in evalArray which are not in referenceArray.
+func filterItems(referenceArray, evalArray []string) (result []string) {
+	// Create a map to store elements of referenceArray for fast lookup
+	referenceArrayMap := make(map[string]bool)
+	for _, item := range referenceArray {
+		referenceArrayMap[item] = true
+	}
+
+	// Iterate through elements of evalArray
+	for _, item := range evalArray {
+		// Check if the item is not in referenceArray
+		if !referenceArrayMap[item] {
+			// Append to the result array
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 // restore extended attributes for windows
@@ -370,6 +449,14 @@ func handleFileAttributes(path string, data []byte) (err error) {
 	if err != nil {
 		return err
 	}
+
+	if attrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
+		err = encryptFile(pathPointer)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+		}
+	}
+
 	return syscall.SetFileAttributes(pathPointer, attrs)
 }
 

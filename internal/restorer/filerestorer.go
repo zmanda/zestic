@@ -281,7 +281,7 @@ func (r *fileRestorer) downloadPack(ctx context.Context, pack *packInfo) error {
 					writeErr := r.filesWriter.writeToFile(r.targetPath(file.location), blobData, offset, createSize, file)
 
 					if r.progress != nil {
-						r.progress.AddProgress(file.location, uint64(len(blobData)), uint64(file.size))
+						r.progress.AddProgress(file.attrs, file.location, uint64(len(blobData)), uint64(file.size))
 					}
 
 					return writeErr
