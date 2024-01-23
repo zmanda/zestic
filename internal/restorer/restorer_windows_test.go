@@ -805,7 +805,7 @@ func getOrderedAdsNodes(dir string, mainNodeName string, order []int, streams []
 	if isDirectory {
 		mode = os.FileMode(2147484159)
 	} else {
-		if attributes.ReadOnly {
+		if attributes != nil && attributes.ReadOnly {
 			mode = os.FileMode(292)
 		} else {
 			mode = os.FileMode(438)
