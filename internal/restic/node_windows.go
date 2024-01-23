@@ -8,9 +8,18 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unsafe"
 
 	"github.com/restic/restic/internal/debug"
 	"github.com/restic/restic/internal/errors"
+	"github.com/restic/restic/internal/fs"
+	"golang.org/x/sys/windows"
+)
+
+var (
+	modAdvapi32     = syscall.NewLazyDLL("advapi32.dll")
+	procEncryptFile = modAdvapi32.NewProc("EncryptFileW")
+	procDecryptFile = modAdvapi32.NewProc("DecryptFileW")
 )
 
 // mknod is not supported on Windows.
@@ -192,7 +201,64 @@ func handleFileAttributes(path string, data []byte) (err error) {
 	if err != nil {
 		return err
 	}
+	err = fixEncryptionAttribute(path, attrs, pathPointer)
+	if err != nil {
+		debug.Log("Could not change encryption attribute for path: %s: %v", path, err)
+	}
 	return syscall.SetFileAttributes(pathPointer, attrs)
+}
+
+// fixEncryptionAttribute checks if a file needs to be marked encrypted and is not already encrypted, it sets
+// the FILE_ATTRIBUTE_ENCRYPTED. Conversely, if the file needs to be marked unencrypted and it is already
+// marked encrypted, it removes the FILE_ATTRIBUTE_ENCRYPTED.
+func fixEncryptionAttribute(path string, attrs uint32, pathPointer *uint16) (err error) {
+	if attrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
+		err = encryptFile(pathPointer)
+		if err != nil {
+			if fs.IsAccessDenied(err) {
+				// If existing file already has readonly or system flag, encrypt file call fails.
+				// We have already cleared readonly flag, clearing system flag if needed.
+				// The readonly and system flags will be set again at the end of this func if they are needed.
+				err = fs.ClearSystem(path)
+				if err != nil {
+					return fmt.Errorf("failed to encrypt file: failed to clear readonly/system flag: %s : %v", path, err)
+				}
+				err = encryptFile(pathPointer)
+				if err != nil {
+					return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+				}
+			} else {
+				return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+			}
+		}
+	} else {
+		existingAttrs, err := windows.GetFileAttributes(pathPointer)
+		if err != nil {
+			return fmt.Errorf("failed to get file attributes for existing file: %s : %v", path, err)
+		}
+		if existingAttrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
+			// File should not be encrypted, but its already encrypted. Decrypt it.
+			err = decryptFile(pathPointer)
+			if err != nil {
+				if fs.IsAccessDenied(err) {
+					// If existing file already has readonly or system flag, encrypt file call fails.
+					// We have already cleared readonly flag, clearing system flag if needed.
+					// The readonly and system flags will be set again after this func if they are needed.
+					err = fs.ClearSystem(path)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt file: failed to clear readonly/system flag: %s : %v", path, err)
+					}
+					err = decryptFile(pathPointer)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+					}
+				} else {
+					return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+				}
+			}
+		}
+	}
+	return err
 }
 
 // handleCreationTime gets the creation time from the data and sets it to the file/folder at
@@ -222,6 +288,26 @@ func handleCreationTime(path string, data []byte) (err error) {
 	creationTime.LowDateTime = binary.LittleEndian.Uint32(data[0:4])
 	creationTime.HighDateTime = binary.LittleEndian.Uint32(data[4:8])
 	if err := syscall.SetFileTime(handle, &creationTime, nil, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+// encryptFile set the encrypted flag on the file.
+func encryptFile(pathPointer *uint16) error {
+	// Call EncryptFile function
+	ret, _, err := procEncryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
+	if ret == 0 {
+		return err
+	}
+	return nil
+}
+
+// decryptFile removes the encrypted flag from the file.
+func decryptFile(pathPointer *uint16) error {
+	// Call DecryptFile function
+	ret, _, err := procDecryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
+	if ret == 0 {
 		return err
 	}
 	return nil
