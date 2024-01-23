@@ -160,9 +160,7 @@ func TestFileAttributeCombination(t *testing.T) {
 		testName := getCombinationTestName(fileInfo, fileName, fileInfo.attributes)
 
 		t.Run(testName, func(t *testing.T) {
-
 			testDir := t.TempDir()
-
 			res, _ := SetupWithAttributes(t, fileInfo, testDir, fileInfo.attributes)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -209,9 +207,7 @@ func TestDirAttributeCombination(t *testing.T) {
 		testName := getCombinationTestName(dirInfo, fileName, dirInfo.attributes)
 
 		t.Run(testName, func(t *testing.T) {
-
 			testDir := t.TempDir()
-
 			res, _ := SetupWithAttributes(t, dirInfo, testDir, dirInfo.attributes)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -272,9 +268,7 @@ func TestFileAttributeCombinationsOverwrite(t *testing.T) {
 			testName := getCombinationTestName(fileInfo, fileName, existingFileAttr)
 
 			t.Run(testName, func(t *testing.T) {
-
 				testDir := t.TempDir()
-
 				res, _ := SetupWithAttributes(t, fileInfo, testDir, existingFileAttr)
 
 				ctx, cancel := context.WithCancel(context.Background())
@@ -309,34 +303,28 @@ func verifyMainFileRestore(t *testing.T, mainFilePath string, fileInfo NodeInfo)
 func verifyAttributes(t *testing.T, mainFilePath string, attr Attributes) {
 	ptr, err := windows.UTF16PtrFromString(mainFilePath)
 	rtest.OK(t, err)
-
 	fileAttributes, err := syscall.GetFileAttributes(ptr)
 	rtest.OK(t, err)
-
 	if attr.ReadOnly {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0, "Expected read only attibute.")
 	} else {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_READONLY == 0, "Unexpected read only attibute.")
 	}
-
 	if attr.Hidden {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_HIDDEN != 0, "Expected hidden attibute.")
 	} else {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_HIDDEN == 0, "Unexpected hidden attibute.")
 	}
-
 	if attr.System {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_SYSTEM != 0, "Expected system attibute.")
 	} else {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_SYSTEM == 0, "Unexpected system attibute.")
 	}
-
 	if attr.Archive {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_ARCHIVE != 0, "Expected archive attibute.")
 	} else {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_ARCHIVE == 0, "Unexpected archive attibute.")
 	}
-
 	if attr.Encrypted {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_ENCRYPTED != 0, "Expected encrypted attibute.")
 	} else {
@@ -350,22 +338,18 @@ func createEncryptedFileWriteData(filepath string, fileInfo NodeInfo) error {
 	if err == nil {
 		var handle windows.Handle
 		handle, err = windows.CreateFile(ptr, uint32(windows.GENERIC_READ|windows.GENERIC_WRITE), uint32(windows.FILE_SHARE_READ), nil, uint32(windows.CREATE_ALWAYS), windows.FILE_ATTRIBUTE_ENCRYPTED, 0)
-
 		if err != nil {
 			return err
 		}
-
 		_, err = windows.Write(handle, []byte(fileInfo.data))
 		if err != nil {
 			return err
 		}
-
 		err = windows.CloseHandle(handle)
 		if err != nil {
 			return err
 		}
 	}
-
 	return err
 }
 
@@ -374,9 +358,7 @@ func SetupWithAttributes(t *testing.T, nodeInfo NodeInfo, testDir string, existi
 	if nodeInfo.Exists {
 		if !nodeInfo.IsDirectory {
 			os.MkdirAll(path.Join(testDir, nodeInfo.parentDir), os.ModeDir)
-
 			filepath := path.Join(testDir, nodeInfo.parentDir, nodeInfo.name)
-
 			if existingFileAttr.Encrypted {
 				err := createEncryptedFileWriteData(filepath, nodeInfo)
 				rtest.OK(t, err)
@@ -410,7 +392,6 @@ func SetupWithAttributes(t *testing.T, nodeInfo NodeInfo, testDir string, existi
 	}
 
 	streams := []DataStreamInfo{}
-
 	if !nodeInfo.IsDirectory {
 		streams = append(streams, nodeInfo.DataStreamInfo)
 	}
@@ -431,7 +412,6 @@ func getNodes(dir string, mainNodeName string, order []int, streams []DataStream
 
 	getFileNodes := func() []NamedNode {
 		nodes := []NamedNode{}
-
 		if isDirectory {
 			nodes = append(nodes, NamedNode{
 				name: mainNodeName,
@@ -466,7 +446,6 @@ func getNodes(dir string, mainNodeName string, order []int, streams []DataStream
 				})
 			}
 		}
-
 		return nodes
 	}
 
@@ -483,15 +462,11 @@ func getNodes(dir string, mainNodeName string, order []int, streams []DataStream
 }
 
 func setup(t *testing.T, namedNodes []NamedNode) *Restorer {
-
 	repo := repository.TestRepository(t)
-
 	sn, _ := saveOrderedSnapshot(t, repo, OrderedSnapshot{
 		nodes: namedNodes,
 	})
-
 	res := NewRestorer(repo, sn, false, nil)
-
 	return res
 }
 
@@ -614,15 +589,12 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 
 func GetAttributeValue(attr *Attributes) uint32 {
 	var fileattr uint32
-
 	if attr.ReadOnly {
 		fileattr |= windows.FILE_ATTRIBUTE_READONLY
 	}
-
 	if attr.Hidden {
 		fileattr |= windows.FILE_ATTRIBUTE_HIDDEN
 	}
-
 	if attr.Encrypted {
 		fileattr |= windows.FILE_ATTRIBUTE_ENCRYPTED
 	}
@@ -640,7 +612,6 @@ func GetNonReadonlyAttributes(attr *Attributes) uint32 {
 	if attr.Hidden {
 		fileattr |= windows.FILE_ATTRIBUTE_HIDDEN
 	}
-
 	if attr.Encrypted {
 		fileattr |= windows.FILE_ATTRIBUTE_ENCRYPTED
 	}
@@ -664,17 +635,14 @@ func saveOrderedSnapshot(t testing.TB, repo restic.Repository, snapshot OrderedS
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	sn, err := restic.NewSnapshot([]string{"test"}, nil, "", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	sn.Tree = &treeID
 	id, err := restic.SaveSnapshot(ctx, repo, sn)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	return sn, id
 }
