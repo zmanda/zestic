@@ -51,40 +51,9 @@ func open(ctx context.Context, cfg Config, rt http.RoundTripper) (*Backend, erro
 		minio.MaxRetry = int(cfg.MaxRetries)
 	}
 
-	// Chains all credential types, in the following order:
-	// 	- Static credentials provided by user
-	//	- AWS env vars (i.e. AWS_ACCESS_KEY_ID)
-	//  - Minio env vars (i.e. MINIO_ACCESS_KEY)
-	//  - AWS creds file (i.e. AWS_SHARED_CREDENTIALS_FILE or ~/.aws/credentials)
-	//  - Minio creds file (i.e. MINIO_SHARED_CREDENTIALS_FILE or ~/.mc/config.json)
-	//  - IAM profile based credentials. (performs an HTTP
-	//    call to a pre-defined endpoint, only valid inside
-	//    configured ec2 instances)
-	creds := credentials.NewChainCredentials([]credentials.Provider{
-		&credentials.EnvAWS{},
-		&credentials.Static{
-			Value: credentials.Value{
-				AccessKeyID:     cfg.KeyID,
-				SecretAccessKey: cfg.Secret.Unwrap(),
-			},
-		},
-		&credentials.EnvMinio{},
-		&credentials.FileAWSCredentials{},
-		&credentials.FileMinioClient{},
-		&credentials.IAM{
-			Client: &http.Client{
-				Transport: http.DefaultTransport,
-			},
-		},
-	})
-
-	c, err := creds.Get()
+	creds, err := getCredentials(cfg)
 	if err != nil {
-		return nil, errors.Wrap(err, "creds.Get")
-	}
-
-	if c.SignerType == credentials.SignatureAnonymous {
-		debug.Log("using anonymous access for %#v", cfg.Endpoint)
+		return nil, errors.Wrap(err, "s3.getCredentials")
 	}
 
 	options := &minio.Options{
@@ -123,6 +92,91 @@ func open(ctx context.Context, cfg Config, rt http.RoundTripper) (*Backend, erro
 	be.Layout = l
 
 	return be, nil
+}
+
+// getCredentials -- runs through the various credential types and returns the first one that works.
+// additionally if the user has specified a role to assume, it will do that as well.
+func getCredentials(cfg Config) (*credentials.Credentials, error) {
+	// Chains all credential types, in the following order:
+	// 	- Static credentials provided by user
+	//	- AWS env vars (i.e. AWS_ACCESS_KEY_ID)
+	//  - Minio env vars (i.e. MINIO_ACCESS_KEY)
+	//  - AWS creds file (i.e. AWS_SHARED_CREDENTIALS_FILE or ~/.aws/credentials)
+	//  - Minio creds file (i.e. MINIO_SHARED_CREDENTIALS_FILE or ~/.mc/config.json)
+	//  - IAM profile based credentials. (performs an HTTP
+	//    call to a pre-defined endpoint, only valid inside
+	//    configured ec2 instances)
+	creds := credentials.NewChainCredentials([]credentials.Provider{
+		&credentials.EnvAWS{},
+		&credentials.Static{
+			Value: credentials.Value{
+				AccessKeyID:     cfg.KeyID,
+				SecretAccessKey: cfg.Secret.Unwrap(),
+			},
+		},
+		&credentials.EnvMinio{},
+		&credentials.FileAWSCredentials{},
+		&credentials.FileMinioClient{},
+		&credentials.IAM{
+			Client: &http.Client{
+				Transport: http.DefaultTransport,
+			},
+		},
+	})
+
+	c, err := creds.Get()
+	if err != nil {
+		return nil, errors.Wrap(err, "creds.Get")
+	}
+
+	if c.SignerType == credentials.SignatureAnonymous {
+		debug.Log("using anonymous access for %#v", cfg.Endpoint)
+	}
+
+	roleArn := os.Getenv("RESTIC_AWS_ASSUME_ROLE_ARN")
+	if roleArn != "" {
+		// use the region provided by the configuration by default
+		awsRegion := cfg.Region
+		// allow the region to be overridden if for some reason it is required
+		if os.Getenv("RESTIC_AWS_ASSUME_ROLE_REGION") != "" {
+			awsRegion = os.Getenv("RESTIC_AWS_ASSUME_ROLE_REGION")
+		}
+
+		sessionName := os.Getenv("RESTIC_AWS_ASSUME_ROLE_SESSION_NAME")
+		externalID := os.Getenv("RESTIC_AWS_ASSUME_ROLE_EXTERNAL_ID")
+		policy := os.Getenv("RESTIC_AWS_ASSUME_ROLE_POLICY")
+		stsEndpoint := os.Getenv("RESTIC_AWS_ASSUME_ROLE_STS_ENDPOINT")
+
+		if stsEndpoint == "" {
+			if awsRegion != "" {
+				if strings.HasPrefix(awsRegion, "cn-") {
+					stsEndpoint = "https://sts." + awsRegion + ".amazonaws.com.cn"
+				} else {
+					stsEndpoint = "https://sts." + awsRegion + ".amazonaws.com"
+				}
+			} else {
+				stsEndpoint = "https://sts.amazonaws.com"
+			}
+		}
+
+		opts := credentials.STSAssumeRoleOptions{
+			RoleARN:         roleArn,
+			AccessKey:       c.AccessKeyID,
+			SecretKey:       c.SecretAccessKey,
+			SessionToken:    c.SessionToken,
+			RoleSessionName: sessionName,
+			ExternalID:      externalID,
+			Policy:          policy,
+			Location:        awsRegion,
+		}
+
+		creds, err = credentials.NewSTSAssumeRole(stsEndpoint, opts)
+		if err != nil {
+			return nil, errors.Wrap(err, "creds.AssumeRole")
+		}
+	}
+
+	return creds, nil
 }
 
 // Open opens the S3 backend at bucket and region. The bucket is created if it
@@ -271,16 +325,29 @@ func (be *Backend) Path() string {
 	return be.cfg.Prefix
 }
 
+// useStorageClass returns whether file should be saved in the provided Storage Class
+// For archive storage classes, only data files are stored using that class; metadata
+// must remain instantly accessible.
+func (be *Backend) useStorageClass(h backend.Handle) bool {
+	notArchiveClass := be.cfg.StorageClass != "GLACIER" && be.cfg.StorageClass != "DEEP_ARCHIVE"
+	isDataFile := h.Type == backend.PackFile && !h.IsMetadata
+	return isDataFile || notArchiveClass
+}
+
 // Save stores data in the backend at the handle.
 func (be *Backend) Save(ctx context.Context, h backend.Handle, rd backend.RewindReader) error {
 	objName := be.Filename(h)
 
-	opts := minio.PutObjectOptions{StorageClass: be.cfg.StorageClass}
-	opts.ContentType = "application/octet-stream"
-	// the only option with the high-level api is to let the library handle the checksum computation
-	opts.SendContentMd5 = true
-	// only use multipart uploads for very large files
-	opts.PartSize = 200 * 1024 * 1024
+	opts := minio.PutObjectOptions{
+		ContentType: "application/octet-stream",
+		// the only option with the high-level api is to let the library handle the checksum computation
+		SendContentMd5: true,
+		// only use multipart uploads for very large files
+		PartSize: 200 * 1024 * 1024,
+	}
+	if be.useStorageClass(h) {
+		opts.StorageClass = be.cfg.StorageClass
+	}
 
 	info, err := be.client.PutObject(ctx, be.cfg.Bucket, objName, io.NopCloser(rd), int64(rd.Length()), opts)
 
