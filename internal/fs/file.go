@@ -3,7 +3,6 @@ package fs
 import (
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -133,23 +132,10 @@ func IsAccessDenied(err error) bool {
 
 // ClearReadonly will make the file writable.
 func ClearReadonly(path string) error {
-	// Get the current file permissions
-	info, err := os.Stat(path)
-	if err != nil {
+	// If file is not writable, make it writable
+	// Set the new file permissions
+	if err := os.Chmod(path, 0600); err != nil {
 		return err
 	}
-
-	// Add or remove the read-only flag as needed
-	newMode := info.Mode()
-	if newMode.Perm()&os.FileMode(syscall.S_IWRITE) == 0 {
-		// If file is not writable, make it writable
-		newMode = newMode | os.FileMode(syscall.S_IWRITE)
-		// Set the new file permissions
-		err = os.Chmod(path, newMode)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
