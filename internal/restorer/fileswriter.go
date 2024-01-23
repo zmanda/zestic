@@ -60,7 +60,21 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 
 		f, err := os.OpenFile(path, flags, 0600)
 		if err != nil {
-			return nil, err
+			if fs.IsAccessDenied(err) {
+				// If file is readonly, clear the readonly flag and try again
+				// as the metadata will be set again in the second pass and the
+				// readonly flag will be applied again if needed.
+				err = fs.ClearReadonly(path)
+				if err != nil {
+					return nil, err
+				}
+				f, err = os.OpenFile(path, flags, 0600)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, err
+			}
 		}
 
 		wr := &partialFile{File: f, users: 1, sparse: sparse}

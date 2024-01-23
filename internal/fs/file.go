@@ -3,6 +3,7 @@ package fs
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -123,4 +124,32 @@ func RemoveIfExists(filename string) error {
 // precise time unit. If there is an error, it will be of type *PathError.
 func Chtimes(name string, atime time.Time, mtime time.Time) error {
 	return os.Chtimes(fixpath(name), atime, mtime)
+}
+
+// IsAccessDenied checks if the error is due to permission error.
+func IsAccessDenied(err error) bool {
+	return os.IsPermission(err)
+}
+
+// ClearReadonly will make the file writable.
+func ClearReadonly(path string) error {
+	// Get the current file permissions
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	// Add or remove the read-only flag as needed
+	newMode := info.Mode()
+	if newMode.Perm()&os.FileMode(syscall.S_IWRITE) == 0 {
+		// If file is not writable, make it writable
+		newMode = newMode | os.FileMode(syscall.S_IWRITE)
+		// Set the new file permissions
+		err = os.Chmod(path, newMode)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
