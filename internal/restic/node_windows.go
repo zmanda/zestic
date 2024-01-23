@@ -22,6 +22,7 @@ const AdsSeparator = "|"
 var (
 	modAdvapi32     = syscall.NewLazyDLL("advapi32.dll")
 	procEncryptFile = modAdvapi32.NewProc("EncryptFileW")
+	procDecryptFile = modAdvapi32.NewProc("DecryptFileW")
 )
 
 // mknod is not supported on Windows.
@@ -33,6 +34,17 @@ func mknod(_ string, mode uint32, dev uint64) (err error) {
 func encryptFile(pathPointer *uint16) error {
 	// Call EncryptFile function
 	ret, _, err := procEncryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
+	if ret == 0 {
+		return err
+	}
+
+	return nil
+}
+
+// decryptFile removes the encrypted flag from the file.
+func decryptFile(pathPointer *uint16) error {
+	// Call DecryptFile function
+	ret, _, err := procDecryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
 	if ret == 0 {
 		return err
 	}
@@ -450,10 +462,50 @@ func handleFileAttributes(path string, data []byte) (err error) {
 		return err
 	}
 
-	if attrs&windows.FILE_ATTRIBUTE_DIRECTORY != 0 && attrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
+	if attrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
 		err = encryptFile(pathPointer)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+			if fs.IsAccessDenied(err) {
+				// If existing file already has readonly or system flag, encrypt file call fails.
+				// We have already cleared readonly flag, clearing system flag if needed.
+				// The readonly and system flags will be set again at the end of this func if they are needed.
+				err = fs.ClearSystem(path)
+				if err != nil {
+					return fmt.Errorf("failed to encrypt file: failed to clear readonly/system flag: %s : %v", path, err)
+				}
+				err = encryptFile(pathPointer)
+				if err != nil {
+					return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+				}
+			} else {
+				return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+			}
+		}
+	} else {
+		existingAttrs, err := windows.GetFileAttributes(pathPointer)
+		if err != nil {
+			return fmt.Errorf("failed to get file attributes for existing file: %s : %v", path, err)
+		}
+		if existingAttrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
+			// File should not be encrypted, but its already encrypted. Decrypt it.
+			err = decryptFile(pathPointer)
+			if err != nil {
+				if fs.IsAccessDenied(err) {
+					// If existing file already has readonly or system flag, encrypt file call fails.
+					// We have already cleared readonly flag, clearing system flag if needed.
+					// The readonly and system flags will be set again at the end of this func if they are needed.
+					err = fs.ClearSystem(path)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt file: failed to clear readonly/system flag: %s : %v", path, err)
+					}
+					err = decryptFile(pathPointer)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+					}
+				} else {
+					return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+				}
+			}
 		}
 	}
 

@@ -102,17 +102,22 @@ func IsAccessDeniedError(err error) bool {
 	return IsErrorOfType(err, windows.ERROR_ACCESS_DENIED)
 }
 
-// IsReadonly checks if the fileAtributes have readonly bit.
-func IsReadonly(fileAttributes uint32) bool {
-	return fileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0
-}
-
 // ClearReadonly removes the readonly flag from the main file.
 func ClearReadonly(isAds bool, path string) error {
 	if isAds {
 		// If this is an ads stream we need to get the main file for setting attributes.
 		path = TrimAds(path)
 	}
+	return ClearAttribute(path, windows.FILE_ATTRIBUTE_READONLY)
+}
+
+// ClearSystem removes the system flag from the file.
+func ClearSystem(path string) error {
+	return ClearAttribute(path, windows.FILE_ATTRIBUTE_SYSTEM)
+}
+
+// ClearAttribute removes the specified attribute from the file.
+func ClearAttribute(path string, attribute uint32) error {
 	ptr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return err
@@ -121,9 +126,9 @@ func ClearReadonly(isAds bool, path string) error {
 	if err != nil {
 		return err
 	}
-	if IsReadonly(fileAttributes) {
-		// Clear FILE_ATTRIBUTE_READONLY flag
-		fileAttributes &= ^uint32(windows.FILE_ATTRIBUTE_READONLY)
+	if fileAttributes&attribute != 0 {
+		// Clear the attribute
+		fileAttributes &= ^uint32(attribute)
 		err = windows.SetFileAttributes(ptr, fileAttributes)
 		if err != nil {
 			return err

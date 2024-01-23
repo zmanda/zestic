@@ -1,22 +1,17 @@
 package restorer
 
 import (
-	"encoding/binary"
 	"errors"
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/restic/restic/internal/fs"
 	"github.com/restic/restic/internal/restic"
-	"golang.org/x/sys/windows"
 )
 
 // OpenFile opens the file with truncate and write only options.
-// We need to handle the encryption attribute, readonly attribute and ads related logic during file creation.
-// Encryption attribute can only be set during file creation time. Changing the encryption attribute after
-// file creation has no effect.
+// We need to handle the readonly attribute and ads related logic during file creation.
 // Readonly files - if an existing file is detected as readonly we clear the flag because otherwise we cannot
 // make changes to the file. The readonly attribute would be set again in the second pass when the attributes
 // are set if the file version being restored has the readonly bit.
@@ -31,7 +26,6 @@ import (
 // Another case to handle is if the mainfile already had more streams and the file version being restored has
 // less streams, then the extra streams need to be removed from the main file. The stream names are present
 // as the value in the generic attribute TypeHasAds.
-// We need to gracefully handle all combinations of the above attributes, starting with simpler cases.
 func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInfo) (file *os.File, err error) {
 	var isAds bool
 	isAds, file, err = fw.openFileImpl(createSize, path, fileInfo)
@@ -57,9 +51,9 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 		// File needs to be created or replaced
 
 		//Define all the flags
-		var hasAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool
+		var hasAds, isAlreadyExists bool
 		var adsValues []string
-		adsValues, hasAds, isAds, isEncryptionNeeded = checkGenericAttributes(fileInfo.attrs)
+		adsValues, hasAds, isAds = getAdsAttributes(fileInfo.attrs)
 
 		// This means that this is an ads related file. It either has ads streams or is an ads streams
 		isAdsRelated := hasAds || isAds
@@ -86,13 +80,6 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 		if err == nil {
 			// File already exists
 			isAlreadyExists = true
-			// File is already encrypted
-			isAlreadyEncrypted, err = isFileEncrypted(file)
-			if err != nil {
-				// Error while checking if the file is encrypted. Close the file and return the error.
-				_ = file.Close()
-				return isAds, nil, err
-			}
 		} else if !os.IsNotExist(err) {
 			// Any error other that IsNotExist error, then do not continue.
 			// If the error was because access is denied,
@@ -103,7 +90,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 		}
 		//At this point readonly flag is already handled and we need not consider it anymore.
 
-		file, err = handleCreateFile(path, mainPath, file, adsValues, isAdsRelated, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
+		file, err = handleCreateFile(path, mainPath, file, adsValues, isAdsRelated, hasAds, isAds, isAlreadyExists)
 	} else {
 		// File is already created. For subsequent writes, only use os.O_WRONLY flag.
 		flags = os.O_WRONLY
@@ -114,39 +101,20 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 }
 
 // handleCreateFile handles all the various combination of states while creating the file if needed.
-func handleCreateFile(path string, mainPath string, fileIn *os.File, adsValues []string, isAdsRelated, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
+func handleCreateFile(path string, mainPath string, fileIn *os.File, adsValues []string, isAdsRelated, hasAds, isAds, isAlreadyExists bool) (file *os.File, err error) {
 	if !isAdsRelated {
 		// This is the simplest case where ADS files are not involved.
-		file, err = handleCreateFileNonAds(path, fileIn, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
+		file, err = handleCreateFileNonAds(path, fileIn, isAlreadyExists)
 	} else {
 		// This is a complex case needing coordination between the main file and the ads files.
-		file, err = handleCreateFileAds(path, mainPath, fileIn, adsValues, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists)
+		file, err = handleCreateFileAds(path, mainPath, fileIn, adsValues, hasAds, isAds, isAlreadyExists)
 	}
 
 	return file, err
 }
 
 // handleCreateFileNonAds handles all the various combination of states while creating the non-ads file if needed.
-func handleCreateFileNonAds(path string, fileIn *os.File, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
-	// Deduce the secondary encryption handling flags
-	isSameEncryption, isAddEncryption, isRemoveEncryption := deduceEncryptionHandlingFlags(isAlreadyExists, isEncryptionNeeded, isAlreadyEncrypted)
-
-	if isSameEncryption {
-		return handleCreateFileNonAdsSameEncryption(path, fileIn, isEncryptionNeeded, isAlreadyExists)
-	}
-
-	if isAddEncryption {
-		return handleCreateFileNonAdsAddEncryption(path, fileIn, isAlreadyExists)
-	}
-
-	if isRemoveEncryption {
-		return handleCreateFileNonAdsRemoveEncryption(path, fileIn, isAlreadyExists)
-	}
-	return nil, errors.New("invalid case for create file non-ads")
-}
-
-// handleCreateFileNonAdsSameEncryption handles creation of non ads files where there is no change in encryption attribute.
-func handleCreateFileNonAdsSameEncryption(path string, fileIn *os.File, isEncryptionNeeded, isAlreadyExists bool) (file *os.File, err error) {
+func handleCreateFileNonAds(path string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
 	// This is the simple case. We do not need to change the encryption attribute.
 	if isAlreadyExists {
 		// If the non-ads file already exists and no change to encryption, return the file
@@ -158,88 +126,8 @@ func handleCreateFileNonAdsSameEncryption(path string, fileIn *os.File, isEncryp
 	}
 }
 
-// handleCreateFileNonAdsAddEncryption handles creation of non ads files where the encryption attribute needs to be added.
-func handleCreateFileNonAdsAddEncryption(path string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
-	// Encryption needs to be added
-	if isAlreadyExists {
-		// First close the already existing file which was created.
-		err = fileIn.Close()
-		if err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-		// File already exists, so we need to remove it before adding the new file with encryption.
-		err = removeAndCreateEncryptedFile(path)
-		if err != nil {
-			return nil, err
-		}
-		return openFileWithWriteOnly(path)
-	} else {
-		// File doesn't already exist, so we can simply create it with the encryption attribute.
-		err = createEncryptedFile(path)
-		if err != nil {
-			return nil, err
-		}
-		return openFileWithWriteOnly(path)
-	}
-}
-
-// handleCreateFileNonAdsRemoveEncryption handles creation of non ads files where the encryption attribute needs to be removed.
-func handleCreateFileNonAdsRemoveEncryption(path string, fileIn *os.File, isAlreadyExists bool) (file *os.File, err error) {
-	// Encryption needs to be removed
-	if isAlreadyExists {
-		// First close the already existing file which was created.
-		err = fileIn.Close()
-		if err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-		// File already exists, so we need to remove it before adding the new file without encryption.
-		err = os.Remove(path)
-		if err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-		return openFileWithCreate(path)
-	} else {
-		// File doesn't already exist, so we can simply create it without the encryption attribute.
-		return openFileWithCreate(path)
-	}
-}
-
 // handleCreateFileAds handles all the various combination of states while creating the ads related file if needed.
-func handleCreateFileAds(path string, mainPath string, fileIn *os.File, adsValues []string, hasAds, isAds, isEncryptionNeeded, isAlreadyEncrypted, isAlreadyExists bool) (file *os.File, err error) {
-	// Deduce the secondary encryption handling flags
-	isSameEncryption, isAddEncryption, isRemoveEncryption := deduceEncryptionHandlingFlags(isAlreadyExists, isEncryptionNeeded, isAlreadyEncrypted)
-
-	if isSameEncryption {
-		file, err = handleCreateFileAdsSameEncryption(path, fileIn, hasAds, isAds, isEncryptionNeeded, isAlreadyExists)
-		// if hasAds && isAlreadyExists {
-		// 	//check which streams need to be removed and remove the extra streams
-		// 	removeExtraStreams(path, adsValues, mainPath)
-		// }
-		return file, err
-	}
-
-	if isAddEncryption {
-		file, err = handleCreateFileAdsAddEncryption(path, mainPath, fileIn, isAds, isAlreadyExists)
-		// if hasAds && isAlreadyExists {
-		// 	//check which streams need to be removed and remove the extra streams
-		// 	removeExtraStreams(path, adsValues, mainPath)
-		// }
-		return file, err
-	}
-
-	if isRemoveEncryption {
-		file, err = handleCreateFileAdsRemoveEncryption(path, mainPath, fileIn, isAds, isAlreadyExists)
-		// if hasAds && isAlreadyExists {
-		// 	//check which streams need to be removed and remove the extra streams
-		// 	removeExtraStreams(path, adsValues, mainPath)
-		// }
-		return file, err
-	}
-	return nil, errors.New("invalid case for create file ads")
-}
-
-// handleCreateFileAdsSameEncryption handles creation of ads files where there is no change in encryption attribute.
-func handleCreateFileAdsSameEncryption(path string, fileIn *os.File, hasAds, isAds, isEncryptionNeeded, isAlreadyExists bool) (file *os.File, err error) {
+func handleCreateFileAds(path string, mainPath string, fileIn *os.File, adsValues []string, hasAds, isAds, isAlreadyExists bool) (file *os.File, err error) {
 	// This is the simple case. We do not need to change the encryption attribute.
 	if isAlreadyExists {
 		// If the ads related file already exists and no change to encryption, return the file
@@ -259,18 +147,8 @@ func handleCreateFileAdsSameEncryption(path string, fileIn *os.File, hasAds, isA
 				if os.IsNotExist(err) {
 					// We confirmed that the main file still doesn't exist after syncing.
 					// Hence creating the file with the create flag.
-					if isEncryptionNeeded {
-						// First create the encrypted main file
-						err = createEncryptedFile(path)
-						if err != nil {
-							return nil, err
-						}
-						// Then open the main file without create option
-						return openFileWithTruncWrite(path)
-					} else {
-						// Directly open the main file with create option as it should not be encrypted.
-						return openFileWithCreate(path)
-					}
+					// Directly open the main file with create option as it should not be encrypted.
+					return openFileWithCreate(path)
 				} else {
 					// Some other error occured so stop processing and return it.
 					return nil, err
@@ -284,145 +162,7 @@ func handleCreateFileAdsSameEncryption(path string, fileIn *os.File, hasAds, isA
 	}
 }
 
-// handleCreateFileAdsAddEncryption handles creation of ads files where the encryption attribute needs to be added.
-func handleCreateFileAdsAddEncryption(path, mainPath string, fileIn *os.File, isAds, isAlreadyExists bool) (file *os.File, err error) {
-	return handleCreateFileAdsAddOrRemoveEncryption(path, mainPath, fileIn, true, isAds, isAlreadyExists)
-}
-
-// handleCreateFileAdsRemoveEncryption handles creation of ads files where the encryption attribute needs to be removed.
-func handleCreateFileAdsRemoveEncryption(path, mainPath string, fileIn *os.File, isAds, isAlreadyExists bool) (file *os.File, err error) {
-	return handleCreateFileAdsAddOrRemoveEncryption(path, mainPath, fileIn, false, isAds, isAlreadyExists)
-}
-
-// handleCreateFileAdsAddOrRemoveEncryption handles creation of ads files where the encryption attribute needs to be added or removed.
-func handleCreateFileAdsAddOrRemoveEncryption(path, mainPath string, fileIn *os.File, isEncryptionNeeded, isAds, isAlreadyExists bool) (file *os.File, err error) {
-	// Encryption needs to be added/removed
-	if isAlreadyExists && fileIn != nil {
-		// First close the already existing file which was created.
-		err = fileIn.Close()
-		if err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-	}
-	// If the file already exists, we need to remove it before adding the new file with/without encryption.
-	// This could be a main file or an ads file.
-	// In either case the first time this block is hit, the encrypted/unencrypted file would be recreated.
-	// The isAlreadyExists and isEncrypted checks were done before locking.
-	// Hence, we need to check again if the file was recreated with/without the encryption flag before
-	// trying to remove it, because this would be called concurrently by the other streams.
-	file, err = openFileWithTruncWrite(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// We confirmed that the path does not exist.
-			if isAds {
-				// If this is an ads stream, still need to check if main file exists.
-				// We do not want to truncate while checking because main file writing could have started already.
-				file, err = openFileWithWriteOnly(mainPath)
-				//remove check and create
-				if err == nil {
-					// Main file exists, and ads does not exist.
-					// Here we know file is for the main file so we pass isAdsFileIn as false.
-					return removeExistingAndCreateEncryptionStateFileIfNeeded(file, false, isAds, isEncryptionNeeded, path, mainPath)
-				} else if errors.Is(err, syscall.EISDIR) { // If main file is a directory then we can just create the file ads
-					return createAdsRelatedFile(isAds, path)
-				} else if !os.IsNotExist(err) {
-					// Error other than IsNotExist occured, so stop processing and return it.
-					return nil, err
-				}
-				// Main file does not exist
-			}
-			// Main file does not exist
-
-			// We confirmed that the main file doesn't exist after syncing.
-			// Hence creating the file with the encryption flag.
-			err = createEncryptedFile(path)
-			if err != nil {
-				return nil, err
-			}
-			// This is main file and since it was just created, we just need to open the file
-			// without create flag.
-			return openFileWithWriteOnly(path)
-
-		} else {
-			// Error other than IsNotExist occured, so stop processing and return it.
-			return nil, err
-		}
-	}
-	//File exists
-	return removeExistingAndCreateEncryptionStateFileIfNeeded(file, isAds, isAds, isEncryptionNeeded, path, mainPath)
-}
-
 // Helper methods
-
-// createAdsRelatedFile creates the file with create flag if it is an ads stream or creates it
-// without create flag if it is the main file because main file would already be created.
-func createAdsRelatedFile(isAds bool, path string) (file *os.File, err error) {
-	// After creating the main file we need to open the file.
-	if isAds {
-		// If this is the Ads file, then after the main file was just created, we need to also
-		// create the ads file stream with the create flag.
-		return openFileWithCreate(path)
-	} else {
-		// If this is main file, then since it was just created, we just need to open the file
-		// with write flag.
-		return openFileWithWriteOnly(path)
-	}
-}
-
-// removeExistingAndCreateEncryptionStateFileIfNeeded checks if file is already encrypted/unencrypted based on isEncryptionNeeded
-// value and if not, it removes the file and recreates the encrypted/unencrypted file.
-func removeExistingAndCreateEncryptionStateFileIfNeeded(fileIn *os.File, isAdsFileIn, isAds, isEncryptionNeeded bool, path, mainPath string) (file *os.File, err error) {
-	// file exists
-	var isAlreadyEncrypted bool
-	isAlreadyEncrypted, err = isFileEncrypted(fileIn)
-	if err != nil {
-		return nil, err
-	}
-	if isAlreadyEncrypted == isEncryptionNeeded {
-		// File is already in desired encrypted/unencrypted state.
-		// It may have been recreated with/without encryption flag by the other streams.
-
-		if !isAdsFileIn && isAds {
-			// This means fileIn is the main file, and the file being processed is ads.
-			// First close the main file.
-			fileIn.Close()
-			// Main file is already encrypted, so just create the ads file.
-			return openFileWithCreate(path)
-		} else {
-			// This means fileIn is the main file and file being processed is also main
-			// or fileIn is ads and file processed is also ads.
-			// In both cases since file is already encrypted we can just return it.
-			return fileIn, nil
-		}
-	} else {
-		// File is not in desired encryption state. Close the file before creating a new encrypted/unencrypted main file.
-		err = fileIn.Close()
-		if err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-		if isEncryptionNeeded {
-			return removeAndCreateEncryptedFileAndOpen(isAds, path, mainPath)
-		} else {
-			err = os.Remove(mainPath)
-			if err != nil && !os.IsNotExist(err) {
-				return nil, err
-			}
-			//Create require main/ads file without encryption
-			return openFileWithCreate(path)
-		}
-	}
-}
-
-// removeAndCreateEncryptedFileAndOpen removes the main file and creates the encrypted main file.
-// Then it opens the required main or ads file without or with the create option respectively and returns it.
-func removeAndCreateEncryptedFileAndOpen(isAds bool, path, mainPath string) (file *os.File, err error) {
-	// File is not yet encrypted. We need to re-create the main file with the encryption flag.
-	err = removeAndCreateEncryptedFile(mainPath)
-	if err != nil {
-		return nil, err
-	}
-	return createAdsRelatedFile(isAds, path)
-}
 
 // openFileWithCreate opens the file with os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
 func openFileWithCreate(path string) (file *os.File, err error) {
@@ -434,82 +174,6 @@ func openFileWithCreate(path string) (file *os.File, err error) {
 func openFileWithTruncWrite(path string) (file *os.File, err error) {
 	flags := os.O_TRUNC | os.O_WRONLY
 	return os.OpenFile(path, flags, 0600)
-}
-
-// openFileWithWriteOnly opens the file with os.O_WRONLY flag.
-func openFileWithWriteOnly(path string) (file *os.File, err error) {
-	flags := os.O_WRONLY
-	return os.OpenFile(path, flags, 0600)
-}
-
-// deduceEncryptionHandlingFlags deduces the flags for encryption handling based on the passed state flags.
-func deduceEncryptionHandlingFlags(isAlreadyExists bool, isEncryptionNeeded bool, isAlreadyEncrypted bool) (isSameEncryption bool, isAddEncryption bool, isRemoveEncryption bool) {
-	if isAlreadyExists {
-		if isEncryptionNeeded {
-			// Based on the generic attributes of the file being restored, we expect the file to be encrypted.
-			if isAlreadyEncrypted {
-				// Simple case where file is already encrypted. No need to change encryption
-				isSameEncryption = true
-			} else {
-				// File should be encrypted but not already encrypted. Need to add the encryption attrib to file.
-				isAddEncryption = true
-			}
-		} else {
-			// Based on the generic attributes of the file being restored, we expect the file to not be encrypted.
-			if isAlreadyEncrypted {
-				// File should be not encrypted by already encrypted. Need to remove the encryption attrib from file.
-				isRemoveEncryption = true
-			} else {
-				// Simple case where file is already not encrypted. No need to change encryption
-				isSameEncryption = true
-			}
-		}
-	} else {
-		isSameEncryption = !isEncryptionNeeded
-		isAddEncryption = isEncryptionNeeded
-		// isSameEncryption should be used if file is not encrypted, cause no encryption needs to be added or removed.
-		// isAddEncryption is needed if encryption needs to be added.
-	}
-	return isSameEncryption, isAddEncryption, isRemoveEncryption
-}
-
-// isFileEncrypted checks if file is encrypted.
-func isFileEncrypted(file *os.File) (isFileEncrypted bool, err error) {
-	var fi os.FileInfo
-	fi, err = file.Stat()
-	if err == nil {
-		stat, ok := (fi.Sys()).(*syscall.Win32FileAttributeData)
-		if ok && stat != nil {
-			fileAttributes := stat.FileAttributes
-
-			isFileEncrypted = fileAttributes&windows.FILE_ATTRIBUTE_ENCRYPTED != 0
-		}
-	}
-	return isFileEncrypted, err
-}
-
-// createEncryptedFile creates a file with windows.FILE_ATTRIBUTE_ENCRYPTED file attribute.
-func createEncryptedFile(path string) (err error) {
-	var ptr *uint16
-	ptr, err = windows.UTF16PtrFromString(path)
-	if err == nil {
-		var handle windows.Handle
-		handle, err = windows.CreateFile(ptr, uint32(windows.GENERIC_READ|windows.GENERIC_WRITE), uint32(windows.FILE_SHARE_READ), nil, uint32(windows.CREATE_ALWAYS), uint32(windows.FILE_ATTRIBUTE_ENCRYPTED), 0)
-		if err == nil {
-			err = windows.CloseHandle(handle)
-		}
-	}
-	return err
-}
-
-// removeAndCreateEncryptedFile removes the file before creating the file with encrypted attribute.
-func removeAndCreateEncryptedFile(mainPath string) (err error) {
-	err = os.Remove(mainPath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	err = createEncryptedFile(mainPath)
-	return err
 }
 
 var pathMutexMap = PathMutexMap{
@@ -574,8 +238,8 @@ func GetOrCreateMutex(path string) *sync.Mutex {
 	return mutex
 }
 
-// checkGenericAttributes checks for the required generic attributes.
-func checkGenericAttributes(attrs []restic.GenericAttribute) (adsValues []string, hasAds, isAds, isEncryptionNeeded bool) {
+// getAdsAttributes gets all the ads related attributes.
+func getAdsAttributes(attrs []restic.GenericAttribute) (adsValues []string, hasAds, isAds bool) {
 	if len(attrs) > 0 {
 		adsBytes := restic.GetGenericAttribute(restic.TypeHasADS, attrs)
 		adsString := string(adsBytes)
@@ -583,11 +247,6 @@ func checkGenericAttributes(attrs []restic.GenericAttribute) (adsValues []string
 
 		hasAds = adsBytes != nil
 		isAds = restic.GetGenericAttribute(restic.TypeIsADS, attrs) != nil
-		fileAttrBytes := restic.GetGenericAttribute(restic.TypeFileAttribute, attrs)
-		if len(fileAttrBytes) > 0 {
-			fileAttributes := binary.LittleEndian.Uint32(fileAttrBytes)
-			isEncryptionNeeded = fileAttributes&windows.FILE_ATTRIBUTE_ENCRYPTED != 0
-		}
 	}
-	return adsValues, hasAds, isAds, isEncryptionNeeded
+	return adsValues, hasAds, isAds
 }
