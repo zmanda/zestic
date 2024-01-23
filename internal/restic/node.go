@@ -34,33 +34,34 @@ type ExtendedAttribute struct {
 }
 
 // GenericAttribute is a tuple storing the name and value pairs used internally by restic to provide support for OS-specific functionalities.
-// eg. For windows this is used for SecurityDescriptors, CreationTime, File Attributes like hidden, Security Descriptors etc.
+// eg. For windows this is used for CreationTime, File Attributes like hidden etc.
 type GenericAttribute struct {
 	Name  string `json:"name"`
 	Value []byte `json:"value"`
 }
 
-// GetName implements the GetName method for ExtendedAttribute.
+// GetName is used to get the name of the ExtendedAttribute.
 func (ea *ExtendedAttribute) GetName() string {
 	return ea.Name
 }
 
-// GetValue implements the GetValue method for ExtendedAttribute.
+// GetValue is used to get the value of the ExtendedAttribute.
 func (ea *ExtendedAttribute) GetValue() []byte {
 	return ea.Value
 }
 
-// GetName implements the GetName method for GenericAttribute.
+// GetName is used to get the name of the GenericAttribute.
 func (ga *GenericAttribute) GetName() string {
 	return ga.Name
 }
 
-// GetValue implements the GetValue method for GenericAttribute.
+// GetValue is used to get the value of the GenericAttribute.
 func (ga *GenericAttribute) GetValue() []byte {
 	return ga.Value
 }
 
-// GenericAttributeType can be used for OS specific functionalities by defining specific types in each specific node_xx file.
+// GenericAttributeType can be used for OS specific functionalities by defining specific types
+// in node.go to be used by the specific node_xx files.
 type GenericAttributeType string
 
 // OSType is the type created to represent each specific OS
@@ -176,7 +177,7 @@ func NodeFromFileInfo(path string, fi os.FileInfo) (*Node, error) {
 }
 
 func nodeTypeFromFileInfo(fi os.FileInfo) string {
-	switch fi.Mode() & (os.ModeType | os.ModeCharDevice) {
+	switch fi.Mode() & os.ModeType {
 	case 0:
 		return "file"
 	case os.ModeDir:
@@ -191,6 +192,8 @@ func nodeTypeFromFileInfo(fi os.FileInfo) string {
 		return "fifo"
 	case os.ModeSocket:
 		return "socket"
+	case os.ModeIrregular:
+		return "irregular"
 	}
 
 	return ""
@@ -749,7 +752,7 @@ func (node *Node) fillExtra(path string, fi os.FileInfo) error {
 	case "fifo":
 	case "socket":
 	default:
-		return errors.Errorf("invalid node type %q", node.Type)
+		return errors.Errorf("unsupported file type %q", node.Type)
 	}
 
 	allowExtended, err := node.fillGenericAttributes(path, fi, stat)
@@ -802,7 +805,7 @@ var unknownGenericAttributesHandlingHistory = map[string]string{}
 
 // checkGenericAttributeNameNotHandledAndPut checks if the GenericAttributeType name entry
 // already exists and puts it in the map if not. Not syncing this code as it is not a
-// critical operation. At the most it will print a few extra warnings in the beginning
+// critical operation. At most it will print a few extra warnings in the beginning
 // if called concurrently.
 func checkGenericAttributeNameNotHandledAndPut(value string) bool {
 	// Check if the key exists
