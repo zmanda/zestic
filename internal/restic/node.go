@@ -34,7 +34,7 @@ type ExtendedAttribute struct {
 }
 
 // GenericAttribute is a tuple storing the name and value pairs used internally by restic to provide support for OS-specific functionalities.
-// eg. For windows this is used for CreationTime, File Attributes like hidden etc.
+// eg. For windows this is used for CreationTime, File Attributes like hidden, SecurityDescriptors etc.
 type GenericAttribute struct {
 	Name  string `json:"name"`
 	Value []byte `json:"value"`
