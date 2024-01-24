@@ -135,3 +135,18 @@ func IsErrorOfType(err error, errno syscall.Errno) bool {
 	}
 	return false
 }
+
+// IsAccessDenied checks if the error is due to permission error.
+func IsAccessDenied(err error) bool {
+	return os.IsPermission(err)
+}
+
+// ClearReadonly will make the file writable.
+func ClearReadonly(path string) error {
+	// If file is not writable, make it writable
+	// Set the new file permissions
+	if err := os.Chmod(path, 0600); err != nil {
+		return err
+	}
+	return nil
+}

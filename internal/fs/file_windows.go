@@ -86,32 +86,7 @@ func SanitizeMainFileName(str string) string {
 	return TrimAds(str)
 }
 
-// IsAccessDenied checks if the error is ERROR_ACCESS_DENIED or a Path error due to windows.ERROR_ACCESS_DENIED.
-func IsAccessDenied(err error) bool {
-	isAccessDenied := IsAccessDeniedError(err)
-	if !isAccessDenied {
-		if e, ok := err.(*os.PathError); ok {
-			isAccessDenied = IsAccessDeniedError(e.Err)
-		}
-	}
-	return isAccessDenied
-}
-
-// IsAccessDeniedError checks if the error is ERROR_ACCESS_DENIED.
-func IsAccessDeniedError(err error) bool {
-	return IsErrorOfType(err, windows.ERROR_ACCESS_DENIED)
-}
-
-// ClearReadonly removes the readonly flag from the main file.
-func ClearReadonly(isAds bool, path string) error {
-	if isAds {
-		// If this is an ads stream we need to get the main file for setting attributes.
-		path = TrimAds(path)
-	}
-	return ClearAttribute(path, windows.FILE_ATTRIBUTE_READONLY)
-}
-
-// ClearSystem removes the system flag from the file.
+// ClearSystem removes the system attribute from the file.
 func ClearSystem(path string) error {
 	return ClearAttribute(path, windows.FILE_ATTRIBUTE_SYSTEM)
 }

@@ -27,13 +27,13 @@ import (
 // less streams, then the extra streams need to be removed from the main file. The stream names are present
 // as the value in the generic attribute TypeHasAds.
 func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInfo) (file *os.File, err error) {
-	var isAds bool
-	isAds, file, err = fw.openFileImpl(createSize, path, fileInfo)
+	var mainPath string
+	mainPath, file, err = fw.openFileImpl(createSize, path, fileInfo)
 	if err != nil && fs.IsAccessDenied(err) {
 		// Access is denied, remove readonly and try again.
 		// ClearReadonly removes the readonly flag from the main file
 		// as it will be set again while applying metadata in the next pass if required.
-		err = fs.ClearReadonly(isAds, path)
+		err = fs.ClearReadonly(mainPath)
 		if err == nil {
 			_, file, err = fw.openFileImpl(createSize, path, fileInfo)
 			if err != nil {
@@ -45,13 +45,13 @@ func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInf
 }
 
 // openFileImpl is the actual open file implementation.
-func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fileInfo) (isAds bool, file *os.File, err error) {
+func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fileInfo) (mainPath string, file *os.File, err error) {
 	var flags int
 	if createSize >= 0 {
 		// File needs to be created or replaced
 
 		//Define all the flags
-		var hasAds, isAlreadyExists bool
+		var hasAds, isAds, isAlreadyExists bool
 		var adsValues []string
 		adsValues, hasAds, isAds = getAdsAttributes(fileInfo.attrs)
 
@@ -73,7 +73,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 		}
 
 		if err != nil {
-			return isAds, nil, err
+			return mainPath, nil, err
 		}
 		// First check if file already exists
 		file, err = openFileWithTruncWrite(path)
@@ -86,7 +86,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 			// the calling method will try to check if the file is readonly and if so, it tries to
 			// remove the readonly attribute and call this openFileImpl method again once.
 			// If this method throws access denied again, then it stops trying and return the error.
-			return isAds, nil, err
+			return mainPath, nil, err
 		}
 		//At this point readonly flag is already handled and we need not consider it anymore.
 
@@ -97,7 +97,7 @@ func (fw *filesWriter) openFileImpl(createSize int64, path string, fileInfo *fil
 		file, err = os.OpenFile(path, flags, 0600)
 	}
 
-	return isAds, file, err
+	return mainPath, file, err
 }
 
 // handleCreateFile handles all the various combination of states while creating the file if needed.

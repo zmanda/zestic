@@ -3,7 +3,11 @@
 
 package restorer
 
-import "os"
+import (
+	"os"
+
+	"github.com/restic/restic/internal/fs"
+)
 
 // OpenFile opens the file with create, truncate and write only options if
 // createSize is specified greater than 0 i.e. if the file hasn't already
@@ -16,15 +20,44 @@ func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInf
 // createSize is specified greater than 0 i.e. if the file hasn't already
 // been created. Otherwise it opens the file with only write only option.
 func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (file *os.File, err error) {
-	var flags int
+	var f *os.File
+	var err error
 	if createSize >= 0 {
-		flags = os.O_CREATE | os.O_TRUNC | os.O_WRONLY
+		// First check if file already exists
+		f, err = openFileWithTruncWrite(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				f, err = openFileWithCreate(path)
+			} else if fs.IsAccessDenied(err) {
+				// If file is readonly, clear the readonly flag and try again
+				// as the metadata will be set again in the second pass and the
+				// readonly flag will be applied again if needed.
+				err = fs.ClearReadonly(path)
+				if err != nil {
+					return nil, err
+				}
+				f, err = openFileWithTruncWrite(path)
+			} else {
+				return nil, err
+			}
+		}
 	} else {
-		flags = os.O_WRONLY
+		flags := os.O_WRONLY
+		f, err = os.OpenFile(path, flags, 0600)
 	}
-
-	file, err = os.OpenFile(path, flags, 0600)
 	return file, err
+}
+
+// openFileWithCreate opens the file with os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
+func openFileWithCreate(path string) (file *os.File, err error) {
+	flags := os.O_CREATE | os.O_TRUNC | os.O_WRONLY
+	return os.OpenFile(path, flags, 0600)
+}
+
+// openFileWithTruncWrite opens the file without os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
+func openFileWithTruncWrite(path string) (file *os.File, err error) {
+	flags := os.O_TRUNC | os.O_WRONLY
+	return os.OpenFile(path, flags, 0600)
 }
 
 // CleanupPath performs clean up for the specified path.
