@@ -6,8 +6,10 @@ package restic
 import (
 	"fmt"
 	"os"
+	"syscall"
 
 	"github.com/restic/restic/internal/debug"
+	"github.com/restic/restic/internal/errors"
 
 	"github.com/pkg/xattr"
 )
@@ -63,6 +65,25 @@ func listxattr(path string) ([]string, error) {
 // setxattr associates name and data together as an attribute of path.
 func setxattr(path, name string, data []byte) error {
 	return handleXattrErr(xattr.LSet(path, name, data))
+}
+
+func handleXattrErr(err error) error {
+	switch e := err.(type) {
+	case nil:
+		return nil
+
+	case *xattr.Error:
+		// On Linux, xattr calls on files in an SMB/CIFS mount can return
+		// ENOATTR instead of ENOTSUP.
+		switch e.Err {
+		case syscall.ENOTSUP, xattr.ENOATTR:
+			return nil
+		}
+		return errors.WithStack(e)
+
+	default:
+		return errors.WithStack(e)
+	}
 }
 
 // restoreGenericAttributes is no-op.
