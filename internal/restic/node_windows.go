@@ -205,36 +205,6 @@ func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error
 	return sdAttribute, nil
 }
 
-// restoreExtendedAttributes handles restore of the Windows Extended Attributes to the specified path.
-// The Windows API requires setting of all the Extended Attributes in one call.
-func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute) (err error) {
-	var fileHandle windows.Handle
-	switch nodeType {
-	case "file":
-		utf16Path := windows.StringToUTF16Ptr(path)
-		fileAccessRightReadWriteEA := (0x8 | 0x10)
-		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
-	case "dir":
-		utf16Path := windows.StringToUTF16Ptr(path)
-		fileAccessRightReadWriteEA := (0x8 | 0x10)
-		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
-	default:
-		return nil
-	}
-	defer func() {
-		err := windows.CloseHandle(fileHandle)
-		if err != nil {
-			debug.Log("Error closing file handle for %s: %v\n", path, err)
-		}
-	}()
-	if err != nil {
-		err = errors.Errorf("open file failed for path %v, with: %v:\n", path, err)
-	} else if err = fs.SetFileEA(fileHandle, eas); err != nil {
-		err = errors.Errorf("set EA failed for path %v, with: %v:\n", path, err)
-	}
-	return err
-}
-
 // restoreGenericAttribute restores the generic attributes for Windows like File Attributes,
 // Created time, Security Descriptor etc.
 func (attr GenericAttribute) restoreGenericAttribute(path string) error {
