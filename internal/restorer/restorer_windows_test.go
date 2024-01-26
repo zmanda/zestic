@@ -135,12 +135,15 @@ func getCombinationTestName(fi NodeInfo, fileName string, existingAttr Attribute
 	return fileName
 }
 func TestFileAttributeCombination(t *testing.T) {
-
+	t.Parallel()
+	//Generate combination of 5 attributes.
 	attributeCombinations := generatePermutations(5, []bool{})
 
 	fileName := "TestFile.txt"
+	// Iterate through each attribute combination
 	for _, attr1 := range attributeCombinations {
 
+		//Set up the required file information
 		fileInfo := NodeInfo{
 			DataStreamInfo: DataStreamInfo{
 				name: fileName,
@@ -157,21 +160,12 @@ func TestFileAttributeCombination(t *testing.T) {
 			Exists: false,
 		}
 
+		//Get the current test name
 		testName := getCombinationTestName(fileInfo, fileName, fileInfo.attributes)
 
+		//Run test
 		t.Run(testName, func(t *testing.T) {
-			testDir := t.TempDir()
-			res, _ := SetupWithAttributes(t, fileInfo, testDir, fileInfo.attributes)
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			err := res.RestoreTo(ctx, testDir)
-			rtest.OK(t, err)
-
-			//Verify restore
-			mainFilePath := path.Join(testDir, fileInfo.parentDir, fileInfo.name)
-			verifyAttributes(t, mainFilePath, fileInfo.attributes)
+			mainFilePath := runAttributeTests(t, fileInfo, fileInfo.attributes)
 
 			//Check main file restore
 			verifyMainFileRestore(t, mainFilePath, fileInfo)
@@ -181,12 +175,14 @@ func TestFileAttributeCombination(t *testing.T) {
 }
 
 func TestDirAttributeCombination(t *testing.T) {
-
+	t.Parallel()
 	attributeCombinations := generatePermutations(4, []bool{})
 
 	fileName := "TestDir"
+	// Iterate through each attribute combination
 	for _, attr1 := range attributeCombinations {
 
+		//Set up the required directory information
 		dirInfo := NodeInfo{
 			DataStreamInfo: DataStreamInfo{
 				name: fileName,
@@ -204,21 +200,12 @@ func TestDirAttributeCombination(t *testing.T) {
 			IsDirectory: true,
 		}
 
+		//Get the current test name
 		testName := getCombinationTestName(dirInfo, fileName, dirInfo.attributes)
 
+		//Run test
 		t.Run(testName, func(t *testing.T) {
-			testDir := t.TempDir()
-			res, _ := SetupWithAttributes(t, dirInfo, testDir, dirInfo.attributes)
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			err := res.RestoreTo(ctx, testDir)
-			rtest.OK(t, err)
-
-			//Verify restore
-			mainFilePath := path.Join(testDir, dirInfo.parentDir, dirInfo.name)
-			verifyAttributes(t, mainFilePath, dirInfo.attributes)
+			mainFilePath := runAttributeTests(t, dirInfo, dirInfo.attributes)
 
 			//Check directory exists
 			_, err1 := os.Stat(mainFilePath)
@@ -228,12 +215,15 @@ func TestDirAttributeCombination(t *testing.T) {
 }
 
 func TestFileAttributeCombinationsOverwrite(t *testing.T) {
-
+	t.Parallel()
+	//Get attribute combinations
 	attributeCombinations := generatePermutations(5, []bool{})
+	//Get existing file attribute combinations
 	overwriteCombinations := generatePermutations(5, []bool{})
 
 	fileName := "TestOverwriteFile"
 
+	//Iterate through each attribute combination
 	for _, attr1 := range attributeCombinations {
 
 		fileInfo := NodeInfo{
@@ -264,28 +254,36 @@ func TestFileAttributeCombinationsOverwrite(t *testing.T) {
 			})
 		}
 
+		//Iterate through each existing attribute combination
 		for _, existingFileAttr := range existingFileAttribute {
+			//Get the test name
 			testName := getCombinationTestName(fileInfo, fileName, existingFileAttr)
 
+			//Run test
 			t.Run(testName, func(t *testing.T) {
-				testDir := t.TempDir()
-				res, _ := SetupWithAttributes(t, fileInfo, testDir, existingFileAttr)
-
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-
-				err := res.RestoreTo(ctx, testDir)
-				rtest.OK(t, err)
-
-				//Verify restore
-				mainFilePath := path.Join(testDir, fileInfo.parentDir, fileInfo.name)
-				verifyAttributes(t, mainFilePath, fileInfo.attributes)
+				mainFilePath := runAttributeTests(t, fileInfo, existingFileAttr)
 
 				//Check main file restore
 				verifyMainFileRestore(t, mainFilePath, fileInfo)
 			})
 		}
 	}
+}
+
+func runAttributeTests(t *testing.T, fileInfo NodeInfo, existingFileAttr Attributes) string {
+	testDir := t.TempDir()
+	res, _ := SetupWithAttributes(t, fileInfo, testDir, existingFileAttr)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := res.RestoreTo(ctx, testDir)
+	rtest.OK(t, err)
+
+	mainFilePath := path.Join(testDir, fileInfo.parentDir, fileInfo.name)
+	//Verify restore
+	verifyAttributes(t, mainFilePath, fileInfo.attributes)
+	return mainFilePath
 }
 
 func verifyMainFileRestore(t *testing.T, mainFilePath string, fileInfo NodeInfo) {
@@ -303,8 +301,10 @@ func verifyMainFileRestore(t *testing.T, mainFilePath string, fileInfo NodeInfo)
 func verifyAttributes(t *testing.T, mainFilePath string, attr Attributes) {
 	ptr, err := windows.UTF16PtrFromString(mainFilePath)
 	rtest.OK(t, err)
+	//Get file attributes using syscall
 	fileAttributes, err := syscall.GetFileAttributes(ptr)
 	rtest.OK(t, err)
+	//Test positive and negative scenarios
 	if attr.ReadOnly {
 		rtest.Assert(t, fileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0, "Expected read only attibute.")
 	} else {
@@ -337,14 +337,17 @@ func createEncryptedFileWriteData(filepath string, fileInfo NodeInfo) error {
 	ptr, err := windows.UTF16PtrFromString(filepath)
 	if err == nil {
 		var handle windows.Handle
+		//Create the file with encrypted flag
 		handle, err = windows.CreateFile(ptr, uint32(windows.GENERIC_READ|windows.GENERIC_WRITE), uint32(windows.FILE_SHARE_READ), nil, uint32(windows.CREATE_ALWAYS), windows.FILE_ATTRIBUTE_ENCRYPTED, 0)
 		if err != nil {
 			return err
 		}
+		//Write data to file
 		_, err = windows.Write(handle, []byte(fileInfo.data))
 		if err != nil {
 			return err
 		}
+		//Close handle
 		err = windows.CloseHandle(handle)
 		if err != nil {
 			return err
@@ -354,7 +357,7 @@ func createEncryptedFileWriteData(filepath string, fileInfo NodeInfo) error {
 }
 
 func SetupWithAttributes(t *testing.T, nodeInfo NodeInfo, testDir string, existingFileAttr Attributes) (*Restorer, []int) {
-
+	t.Helper()
 	if nodeInfo.Exists {
 		if !nodeInfo.IsDirectory {
 			os.MkdirAll(path.Join(testDir, nodeInfo.parentDir), os.ModeDir)
@@ -384,10 +387,10 @@ func SetupWithAttributes(t *testing.T, nodeInfo NodeInfo, testDir string, existi
 	}
 
 	index := 0
-	order := []int{} //Need for no ads tests
+	order := []int{}
 
 	if !nodeInfo.IsDirectory {
-		order = append(order, index) //For file ads we need to consider the mainfile also in the order of stream for the tests to work
+		order = append(order, index)
 		index++
 	}
 
@@ -413,6 +416,7 @@ func getNodes(dir string, mainNodeName string, order []int, streams []DataStream
 	getFileNodes := func() []NamedNode {
 		nodes := []NamedNode{}
 		if isDirectory {
+			//Add a directory node at the same level as the other streams
 			nodes = append(nodes, NamedNode{
 				name: mainNodeName,
 				node: OrderedDir{
@@ -432,6 +436,7 @@ func getNodes(dir string, mainNodeName string, order []int, streams []DataStream
 				if mainNodeName == stream.name {
 					attr = attributes
 				} else if attributes != nil && attributes.Encrypted {
+					//Set encrypted attribute
 					attr = &Attributes{Encrypted: true}
 				}
 
@@ -474,6 +479,7 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	//Get new generic file attribute
 	getFileAttributes := func(attr *Attributes, isDir bool) (resticAttrib restic.GenericAttribute) {
 
 		if attr == nil {
@@ -483,10 +489,12 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 		fileattr := GetAttributeValue(attr)
 
 		if isDir {
+			//If the node is a directory add FILE_ATTRIBUTE_DIRECTORY to attributes
 			fileattr |= windows.FILE_ATTRIBUTE_DIRECTORY
 		}
 
 		fileAttrData := restic.UInt32ToBytes(fileattr)
+		//Create file attribute generic attribute
 		resticAttrib = restic.NewGenericAttribute(
 			restic.TypeFileAttribute,
 			fileAttrData,
@@ -518,6 +526,7 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 
 			genericAttributes := []restic.GenericAttribute{}
 			if namedNode.attributes != nil {
+				//Add file attribute
 				genericAttributes = append(genericAttributes, getFileAttributes(namedNode.attributes, false))
 			}
 
@@ -560,6 +569,7 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 
 			genericAttributes := []restic.GenericAttribute{}
 			if node.attributes != nil {
+				//Add directory attributes
 				genericAttributes = append(genericAttributes, getFileAttributes(node.attributes, true))
 			}
 
@@ -630,16 +640,19 @@ func saveOrderedSnapshot(t testing.TB, repo restic.Repository, snapshot OrderedS
 
 	wg, wgCtx := errgroup.WithContext(ctx)
 	repo.StartPackUploader(wgCtx, wg)
+	//Save nodes to tree
 	treeID := saveDirOrdered(t, repo, snapshot.nodes, 1000)
 	err := repo.Flush(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
+	//create a dummy snapshot
 	sn, err := restic.NewSnapshot([]string{"test"}, nil, "", time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	sn.Tree = &treeID
+	//Save snapshot
 	id, err := restic.SaveSnapshot(ctx, repo, sn)
 	if err != nil {
 		t.Fatal(err)
