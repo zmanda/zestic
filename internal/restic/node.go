@@ -325,16 +325,6 @@ func (node Node) restoreMetadata(path string) error {
 	return firsterr
 }
 
-func (node Node) restoreExtendedAttributes(path string) error {
-	for _, attr := range node.ExtendedAttributes {
-		err := Setxattr(path, attr.Name, attr.Value)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (node Node) RestoreTimestamps(path string) error {
 	var utimes = [...]syscall.Timespec{
 		syscall.NsecToTimespec(node.AccessTime.UnixNano()),
@@ -776,31 +766,6 @@ func (node *Node) fillExtra(path string, fi os.FileInfo) error {
 		}
 	}
 	return err
-}
-
-func (node *Node) fillExtendedAttributes(path string) error {
-	xattrs, err := Listxattr(path)
-	debug.Log("fillExtendedAttributes(%v) %v %v", path, xattrs, err)
-	if err != nil {
-		return err
-	}
-
-	node.ExtendedAttributes = make([]ExtendedAttribute, 0, len(xattrs))
-	for _, attr := range xattrs {
-		attrVal, err := Getxattr(path, attr)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "can not obtain extended attribute %v for %v:\n", attr, path)
-			continue
-		}
-		attr := ExtendedAttribute{
-			Name:  attr,
-			Value: attrVal,
-		}
-
-		node.ExtendedAttributes = append(node.ExtendedAttributes, attr)
-	}
-
-	return nil
 }
 
 func mkfifo(path string, mode uint32) (err error) {
