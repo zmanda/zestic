@@ -23,13 +23,18 @@ func (s statT) atim() syscall.Timespec { return toTimespec(s.Atim) }
 func (s statT) mtim() syscall.Timespec { return toTimespec(s.Mtim) }
 func (s statT) ctim() syscall.Timespec { return toTimespec(s.Ctim) }
 
-// restoreExtendedAttributes is a no-op on AIX.
-func (node Node) restoreExtendedAttributes(_ string) error {
-	return nil
+// Getxattr is a no-op on AIX.
+func Getxattr(path, name string) ([]byte, error) {
+	return nil, nil
 }
 
-// fillExtendedAttributes is a no-op on AIX.
-func (node *Node) fillExtendedAttributes(_ string) error {
+// Listxattr is a no-op on AIX.
+func Listxattr(path string) ([]string, error) {
+	return nil, nil
+}
+
+// Setxattr is a no-op on AIX.
+func Setxattr(path, name string, data []byte) error {
 	return nil
 }
 
