@@ -48,25 +48,6 @@ func handleXattrErr(err error) error {
 	}
 }
 
-func handleXattrErr(err error) error {
-	switch e := err.(type) {
-	case nil:
-		return nil
-
-	case *xattr.Error:
-		// On Linux, xattr calls on files in an SMB/CIFS mount can return
-		// ENOATTR instead of ENOTSUP.
-		switch e.Err {
-		case syscall.ENOTSUP, xattr.ENOATTR:
-			return nil
-		}
-		return errors.WithStack(e)
-
-	default:
-		return errors.WithStack(e)
-	}
-}
-
 // restoreGenericAttributes is no-op.
 func (node *Node) restoreGenericAttributes(_ string) error {
 	for _, attr := range node.GenericAttributes {
