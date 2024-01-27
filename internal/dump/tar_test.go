@@ -126,7 +126,7 @@ func TestFieldTooLong(t *testing.T) {
 		Path: "/file_with_xattr",
 		Type: "file",
 		Mode: 0644,
-		ExtendedAttributes: []restic.ExtendedAttribute{
+		ExtendedAttributes: []restic.Attribute{
 			{
 				Name:  "user.way_too_large",
 				Value: make([]byte, 2*maxSpecialFileSize),

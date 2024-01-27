@@ -30,10 +30,7 @@ func Setxattr(path, name string, data []byte) error {
 
 // restoreGenericAttributes is no-op on openbsd.
 func (node *Node) restoreGenericAttributes(_ string) error {
-	for _, attr := range node.GenericAttributes {
-		handleUnknownGenericAttributeFound(attr.Name)
-	}
-	return nil
+	return node.handleUnknownGenericAttributesFound()
 }
 
 // fillGenericAttributes is a no-op on openbsd.

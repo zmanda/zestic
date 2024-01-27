@@ -480,7 +480,7 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 	defer cancel()
 
 	//Get new generic file attribute
-	getFileAttributes := func(attr *Attributes, isDir bool) (resticAttrib restic.GenericAttribute) {
+	getFileAttributes := func(attr *Attributes, isDir bool) (resticAttrib restic.Attribute) {
 
 		if attr == nil {
 			return
@@ -524,7 +524,7 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 			}
 			mode := node.Mode
 
-			genericAttributes := []restic.GenericAttribute{}
+			genericAttributes := []restic.Attribute{}
 			if namedNode.attributes != nil {
 				//Add file attribute
 				genericAttributes = append(genericAttributes, getFileAttributes(namedNode.attributes, false))
@@ -567,7 +567,7 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 
 			mode := node.Mode
 
-			genericAttributes := []restic.GenericAttribute{}
+			genericAttributes := []restic.Attribute{}
 			if node.attributes != nil {
 				//Add directory attributes
 				genericAttributes = append(genericAttributes, getFileAttributes(node.attributes, true))

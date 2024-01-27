@@ -20,44 +20,13 @@ import (
 	"github.com/restic/restic/internal/fs"
 )
 
-// Attribute interface defines common methods for ExtendedAttribute and GenericAttribute.
-// Only need the getters in the interface.
-type Attribute interface {
-	GetName() string
-	GetValue() []byte
-}
-
-// ExtendedAttribute is a tuple storing the xattr name and value.
-type ExtendedAttribute struct {
-	Name  string `json:"name"`
-	Value []byte `json:"value"`
-}
-
-// GenericAttribute is a tuple storing the name and value pairs used internally by restic to provide support for OS-specific functionalities.
+// Attribute is a tuple storing the xattr name and value for various filesystems.
+// This struct is also used as a tuple for storing the name and value pairs
+// used internally by restic to provide support for OS-specific functionalities.
 // eg. For windows this is used for CreationTime, File Attributes like hidden etc.
-type GenericAttribute struct {
+type Attribute struct {
 	Name  string `json:"name"`
 	Value []byte `json:"value"`
-}
-
-// GetName is used to get the name of the ExtendedAttribute.
-func (ea *ExtendedAttribute) GetName() string {
-	return ea.Name
-}
-
-// GetValue is used to get the value of the ExtendedAttribute.
-func (ea *ExtendedAttribute) GetValue() []byte {
-	return ea.Value
-}
-
-// GetName is used to get the name of the GenericAttribute.
-func (ga *GenericAttribute) GetName() string {
-	return ga.Name
-}
-
-// GetValue is used to get the value of the GenericAttribute.
-func (ga *GenericAttribute) GetValue() []byte {
-	return ga.Value
 }
 
 // GenericAttributeType can be used for OS specific functionalities by defining specific types
@@ -84,10 +53,10 @@ const (
 )
 
 // When you create new GenericAttributeTypes for any OS, add an entry in this map.
-var genericAttributesForOS = map[string][]OSType{
+var genericAttributesForOS = map[GenericAttributeType][]OSType{
 	//value is an array as some generic attributes may be handled in multiple OSs.
-	string(TypeFileAttribute): {WindowsOS},
-	string(TypeCreationTime):  {WindowsOS},
+	TypeFileAttribute: {WindowsOS},
+	TypeCreationTime:  {WindowsOS},
 }
 
 // Node is a file, directory or other item in a backup.
@@ -111,12 +80,12 @@ type Node struct {
 	// This allows storing arbitrary byte-sequences, which are possible as symlink targets on unix systems,
 	// as LinkTarget without breaking backwards-compatibility.
 	// Must only be set of the linktarget cannot be encoded as valid utf8.
-	LinkTargetRaw      []byte              `json:"linktarget_raw,omitempty"`
-	ExtendedAttributes []ExtendedAttribute `json:"extended_attributes,omitempty"`
-	GenericAttributes  []GenericAttribute  `json:"generic_attributes,omitempty"`
-	Device             uint64              `json:"device,omitempty"` // in case of Type == "dev", stat.st_rdev
-	Content            IDs                 `json:"content"`
-	Subtree            *ID                 `json:"subtree,omitempty"`
+	LinkTargetRaw      []byte      `json:"linktarget_raw,omitempty"`
+	ExtendedAttributes []Attribute `json:"extended_attributes,omitempty"`
+	GenericAttributes  []Attribute `json:"generic_attributes,omitempty"`
+	Device             uint64      `json:"device,omitempty"` // in case of Type == "dev", stat.st_rdev
+	Content            IDs         `json:"content"`
+	Subtree            *ID         `json:"subtree,omitempty"`
 
 	Error string `json:"error,omitempty"`
 
@@ -216,9 +185,9 @@ func (node Node) GetGenericAttribute(genericAttributeType GenericAttributeType) 
 	return nil
 }
 
-// NewGenericAttribute constructs a new GenericAttribute.
-func NewGenericAttribute(name GenericAttributeType, bytes []byte) GenericAttribute {
-	extAttr := GenericAttribute{
+// NewGenericAttribute constructs a new generic Attribute.
+func NewGenericAttribute(name GenericAttributeType, bytes []byte) Attribute {
+	extAttr := Attribute{
 		Name:  string(name),
 		Value: bytes,
 	}
@@ -577,48 +546,22 @@ func (node Node) sameContent(other Node) bool {
 }
 
 func (node Node) sameExtendedAttributes(other Node) bool {
-	nl := len(node.ExtendedAttributes)
-	ol := len(other.ExtendedAttributes)
-	if nl != ol {
-		return false
-	} else if nl == 0 {
-		// This means ol is also 0
-		return true
-	}
-	// Converting the array of ExtendedAttributes to an array of Attribute
-	var attributes []Attribute
-	for _, ea := range node.ExtendedAttributes {
-		attributes = append(attributes, &ea)
-	}
-	var otherAttributes []Attribute
-	for _, ea := range other.ExtendedAttributes {
-		otherAttributes = append(otherAttributes, &ea)
-	}
-	return sameAttributes(attributes, otherAttributes)
+	return sameAttributes(node.ExtendedAttributes, other.ExtendedAttributes)
 }
 
 func (node Node) sameGenericAttributes(other Node) bool {
-	nl := len(node.GenericAttributes)
-	ol := len(other.GenericAttributes)
+	return sameAttributes(node.GenericAttributes, other.GenericAttributes)
+}
+
+func sameAttributes(attributes []Attribute, otherAttributes []Attribute) bool {
+	nl := len(attributes)
+	ol := len(otherAttributes)
 	if nl != ol {
 		return false
 	} else if nl == 0 {
 		// This means ol is also 0
 		return true
 	}
-	// Converting the array of GenericAttributes to an array of Attribute
-	var attributes []Attribute
-	for _, ga := range node.GenericAttributes {
-		attributes = append(attributes, &ga)
-	}
-	var otherAttributes []Attribute
-	for _, ga := range other.GenericAttributes {
-		otherAttributes = append(otherAttributes, &ga)
-	}
-	return sameAttributes(attributes, otherAttributes)
-}
-
-func sameAttributes(attributes []Attribute, otherAttributes []Attribute) bool {
 	// build a set of all attributes that node has
 	type mapvalue struct {
 		value   []byte
@@ -626,27 +569,27 @@ func sameAttributes(attributes []Attribute, otherAttributes []Attribute) bool {
 	}
 	attributesConverted := make(map[string]mapvalue)
 	for _, attr := range attributes {
-		attributesConverted[attr.GetName()] = mapvalue{value: attr.GetValue()}
+		attributesConverted[attr.Name] = mapvalue{value: attr.Value}
 	}
 
 	for _, attr := range otherAttributes {
-		v, ok := attributesConverted[attr.GetName()]
+		v, ok := attributesConverted[attr.Name]
 		if !ok {
 			// extended attribute is not set for node
-			debug.Log("other node has attribute %v, which is not present in node", attr.GetName())
+			debug.Log("other node has attribute %v, which is not present in node", attr.Name)
 			return false
 
 		}
 
-		if !bytes.Equal(v.value, attr.GetValue()) {
+		if !bytes.Equal(v.value, attr.Value) {
 			// attribute has different value
-			debug.Log("attribute %v has different value", attr.GetName())
+			debug.Log("attribute %v has different value", attr.Name)
 			return false
 		}
 
 		// remember that this attribute is present in other.
 		v.present = true
-		attributesConverted[attr.GetName()] = v
+		attributesConverted[attr.Name] = v
 	}
 
 	// check for attributes that are not present in other
@@ -782,14 +725,14 @@ func (node *Node) fillExtendedAttributes(path string) error {
 		return err
 	}
 
-	node.ExtendedAttributes = make([]ExtendedAttribute, 0, len(xattrs))
+	node.ExtendedAttributes = make([]Attribute, 0, len(xattrs))
 	for _, attr := range xattrs {
 		attrVal, err := Getxattr(path, attr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "can not obtain extended attribute %v for %v:\n", attr, path)
 			continue
 		}
-		attr := ExtendedAttribute{
+		attr := Attribute{
 			Name:  attr,
 			Value: attrVal,
 		}
@@ -813,9 +756,10 @@ func (node *Node) fillTimes(stat *statT) {
 
 // handleUnknownGenericAttributeFound is used for handling and distinguing between scenarios related to future versions and cross-OS repositories
 func handleUnknownGenericAttributeFound(genericAttributeName string) {
-	if checkGenericAttributeNameNotHandledAndPut(genericAttributeName) {
+	genericAttributeType := GenericAttributeType(genericAttributeName)
+	if checkGenericAttributeNameNotHandledAndPut(genericAttributeType) {
 		// Print the unique error only once for a given execution
-		value, exists := genericAttributesForOS[genericAttributeName]
+		value, exists := genericAttributesForOS[genericAttributeType]
 
 		if exists {
 			//If genericAttributesForOS contains an entry but we still got here, it means the specific node_xx.go for the current OS did not handle it and the repository may have been originally created on a different OS.
@@ -823,30 +767,26 @@ func handleUnknownGenericAttributeFound(genericAttributeName string) {
 			debug.Log("Ignoring a generic attribute found in the repository: %s which may not be compatible with your OS. Compatible OS: %v", genericAttributeName, value)
 		} else {
 			//If genericAttributesForOS in node.go does not know about this attribute, then the repository may have been created by a newer version which has a newer GenericAttributeType.
-			msg := "WARNING: Found an unrecognized generic attribute in the repository: %s. You may need to upgrade to latest version of restic.%s"
-			_, err := fmt.Fprintf(os.Stderr, msg, genericAttributeName, "\n")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "unable to write to stderr: %v\n", err)
-			}
-			debug.Log(msg, genericAttributeName, "")
+			debug.Log("WARNING: Found an unrecognized generic attribute in the repository: %s. You may need to upgrade to latest version of restic.", genericAttributeName)
 		}
 	}
 }
 
-var unknownGenericAttributesHandlingHistory = map[string]string{}
+// handleUnknownGenericAttributesFound performs validations for all generic attributes in the node.
+func (node Node) handleUnknownGenericAttributesFound() error {
+	for _, attr := range node.GenericAttributes {
+		handleUnknownGenericAttributeFound(attr.Name)
+	}
+	return nil
+}
+
+var unknownGenericAttributesHandlingHistory sync.Map
 
 // checkGenericAttributeNameNotHandledAndPut checks if the GenericAttributeType name entry
-// already exists and puts it in the map if not. Not syncing this code as it is not a
-// critical operation. At most it will print a few extra warnings in the beginning
-// if called concurrently.
-func checkGenericAttributeNameNotHandledAndPut(value string) bool {
-	// Check if the key exists
-	if _, ok := unknownGenericAttributesHandlingHistory[value]; ok {
-		// Key exists, then it is already handled so return false
-		return false
-	}
-
-	// Key doesn't exist, put the value and return true because it is not already handled
-	unknownGenericAttributesHandlingHistory[value] = ""
-	return true
+// already exists and puts it in the map if not.
+func checkGenericAttributeNameNotHandledAndPut(value GenericAttributeType) bool {
+	// If Key doesn't exist, put the value and return true because it is not already handled
+	_, exists := unknownGenericAttributesHandlingHistory.LoadOrStore(value, "")
+	// Key exists, then it is already handled so return false
+	return !exists
 }

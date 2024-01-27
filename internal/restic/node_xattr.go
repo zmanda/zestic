@@ -51,10 +51,7 @@ func handleXattrErr(err error) error {
 
 // restoreGenericAttributes is no-op.
 func (node *Node) restoreGenericAttributes(_ string) error {
-	for _, attr := range node.GenericAttributes {
-		handleUnknownGenericAttributeFound(attr.Name)
-	}
-	return nil
+	return node.handleUnknownGenericAttributesFound()
 }
 
 // fillGenericAttributes is a no-op.

@@ -100,7 +100,7 @@ func (d *Dumper) dumpNodeTar(ctx context.Context, node *restic.Node, w *tar.Writ
 	return d.writeNode(ctx, w, node)
 }
 
-func parseXattrs(xattrs []restic.ExtendedAttribute) map[string]string {
+func parseXattrs(xattrs []restic.Attribute) map[string]string {
 	tmpMap := make(map[string]string)
 
 	for _, attr := range xattrs {

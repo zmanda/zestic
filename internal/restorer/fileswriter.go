@@ -59,16 +59,15 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 				if os.IsNotExist(err) {
 					f, err = openFileWithCreate(path)
 				} else if fs.IsAccessDenied(err) {
-					// If file is readonly, clear the readonly flag and try again
+					// If file is readonly, clear the readonly flag by resetting the
+					// permissions of the file and try again
 					// as the metadata will be set again in the second pass and the
 					// readonly flag will be applied again if needed.
-					err = fs.ClearReadonly(path)
+					err = fs.ResetPermissions(path)
 					if err != nil {
 						return nil, err
 					}
 					f, err = openFileWithTruncWrite(path)
-				} else {
-					return nil, err
 				}
 			}
 		} else {

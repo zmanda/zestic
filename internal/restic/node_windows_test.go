@@ -45,7 +45,7 @@ func TestRestoreFileAttributes(t *testing.T) {
 				ModTime:           parseTime("2005-05-14 21:07:03.111"),
 				AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 				ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-				GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, fileAttr)},
+				GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, fileAttr)},
 			},
 		}
 		runGenericAttributesTestForNodes(expectedNodes, tempDir, t, genericAttributeName, fileAttr)
@@ -66,7 +66,7 @@ func TestRestoreFileAttributes(t *testing.T) {
 				ModTime:           parseTime("2005-05-14 21:07:03.111"),
 				AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 				ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-				GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, folderAttr)},
+				GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, folderAttr)},
 			},
 		}
 		runGenericAttributesTestForNodes(expectedNodes, tempDir, t, genericAttributeName, folderAttr)
@@ -82,7 +82,7 @@ func runGenericAttributesTest(tempDir string, t *testing.T, genericAttributeName
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
 		},
 		{
 			Name:              "testdirectory",
@@ -91,7 +91,7 @@ func runGenericAttributesTest(tempDir string, t *testing.T, genericAttributeName
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
 		},
 	}
 	runGenericAttributesTestForNodes(expectedNodes, tempDir, t, genericAttributeName, genericAttributeExpected)
@@ -173,7 +173,7 @@ func TestNewGenericAttributeType(t *testing.T) {
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
 		},
 		{
 			Name:              "testdirectory",
@@ -182,7 +182,7 @@ func TestNewGenericAttributeType(t *testing.T) {
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
 		},
 	}
 	for _, testNode := range expectedNodes {
