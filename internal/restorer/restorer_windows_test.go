@@ -17,7 +17,6 @@ import (
 	"github.com/restic/restic/internal/repository"
 	"github.com/restic/restic/internal/restic"
 	rtest "github.com/restic/restic/internal/test"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows"
 )
 
@@ -42,23 +41,6 @@ func getBlockCount(t *testing.T, filename string) int64 {
 	return int64(math.Ceil(float64(result) / 512))
 }
 
-type NamedNode struct {
-	name       string
-	node       Node
-	attributes *Attributes
-}
-
-type OrderedSnapshot struct {
-	nodes []NamedNode
-}
-
-type OrderedDir struct {
-	Nodes      []NamedNode
-	Mode       os.FileMode
-	ModTime    time.Time
-	attributes *Attributes
-}
-
 type Attributes struct {
 	ReadOnly  bool
 	Hidden    bool
@@ -67,9 +49,8 @@ type Attributes struct {
 	Encrypted bool
 }
 type DataStreamInfo struct {
-	name      string
-	data      string
-	Encrypted bool
+	name string
+	data string
 }
 type NodeInfo struct {
 	DataStreamInfo
@@ -216,7 +197,7 @@ func setupWithAttributes(t *testing.T, nodeInfo NodeInfo, testDir string, existi
 
 		pathPointer, err := syscall.UTF16PtrFromString(path.Join(testDir, nodeInfo.parentDir, nodeInfo.name))
 		rtest.OK(t, err)
-		syscall.SetFileAttributes(pathPointer, GetAttributeValue(&existingFileAttr))
+		syscall.SetFileAttributes(pathPointer, getAttributeValue(&existingFileAttr))
 	}
 
 	index := 0
@@ -258,47 +239,14 @@ func createEncryptedFileWriteData(filepath string, fileInfo NodeInfo) error {
 	return err
 }
 
-func setup(t *testing.T, namedNodes []NamedNode) *Restorer {
+func setup(t *testing.T, nodesMap map[string]Node) *Restorer {
 	repo := repository.TestRepository(t)
-	sn, _ := saveOrderedSnapshot(t, repo, OrderedSnapshot{
-		nodes: namedNodes,
-	})
-	res := NewRestorer(repo, sn, false, nil)
-	return res
-}
-
-func saveOrderedSnapshot(t testing.TB, repo restic.Repository, snapshot OrderedSnapshot) (*restic.Snapshot, restic.ID) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	wg, wgCtx := errgroup.WithContext(ctx)
-	repo.StartPackUploader(wgCtx, wg)
-	//Save nodes to tree
-	treeID := saveDirOrdered(t, repo, snapshot.nodes, 1000)
-	err := repo.Flush(ctx)
-	rtest.OK(t, err)
-	//create a dummy snapshot
-	sn, err := restic.NewSnapshot([]string{"test"}, nil, "", time.Now())
-	rtest.OK(t, err)
-	sn.Tree = &treeID
-	//Save snapshot
-	id, err := restic.SaveSnapshot(ctx, repo, sn)
-	rtest.OK(t, err)
-	return sn, id
-}
-
-func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode, inode uint64) restic.ID {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	//Get new generic file attribute
-	getFileAttributes := func(attr *Attributes, isDir bool) (resticAttrib restic.Attribute) {
-
+	getFileAttributes := func(attr *Attributes, isDir bool) (genericAttributes []restic.Attribute) {
 		if attr == nil {
 			return
 		}
 
-		fileattr := GetAttributeValue(attr)
+		fileattr := getAttributeValue(attr)
 
 		if isDir {
 			//If the node is a directory add FILE_ATTRIBUTE_DIRECTORY to attributes
@@ -307,107 +255,22 @@ func saveDirOrdered(t testing.TB, repo restic.Repository, namedNodes []NamedNode
 
 		fileAttrData := restic.UInt32ToBytes(fileattr)
 		//Create file attribute generic attribute
-		resticAttrib = restic.NewGenericAttribute(
+		attrib := restic.NewGenericAttribute(
 			restic.TypeFileAttribute,
 			fileAttrData,
 		)
 
-		return
+		//Add file attribute
+		return append(genericAttributes, attrib)
 	}
-
-	tree := &restic.Tree{}
-	for _, namedNode := range namedNodes {
-		name := namedNode.name
-		n := namedNode.node
-		inode++
-		switch node := n.(type) {
-		case File:
-			fi := n.(File).Inode
-			if fi == 0 {
-				fi = inode
-			}
-			lc := n.(File).Links
-			if lc == 0 {
-				lc = 1
-			}
-			fc := []restic.ID{}
-			if len(n.(File).Data) > 0 {
-				fc = append(fc, saveFile(t, repo, node))
-			}
-			mode := node.Mode
-
-			genericAttributes := []restic.Attribute{}
-			if namedNode.attributes != nil {
-				//Add file attribute
-				genericAttributes = append(genericAttributes, getFileAttributes(namedNode.attributes, false))
-			}
-
-			err := tree.Insert(&restic.Node{
-				Type:              "file",
-				Mode:              mode,
-				ModTime:           node.ModTime,
-				Name:              name,
-				UID:               uint32(os.Getuid()),
-				GID:               uint32(os.Getgid()),
-				Content:           fc,
-				Size:              uint64(len(n.(File).Data)),
-				Inode:             fi,
-				Links:             lc,
-				GenericAttributes: genericAttributes,
-			})
-			rtest.OK(t, err)
-		case Dir:
-			id := saveDir(t, repo, node.Nodes, inode)
-
-			mode := node.Mode
-			if mode == 0 {
-				mode = 0755
-			}
-
-			err := tree.Insert(&restic.Node{
-				Type:    "dir",
-				Mode:    mode,
-				ModTime: node.ModTime,
-				Name:    name,
-				UID:     uint32(os.Getuid()),
-				GID:     uint32(os.Getgid()),
-				Subtree: &id,
-			})
-			rtest.OK(t, err)
-		case OrderedDir:
-			id := saveDirOrdered(t, repo, node.Nodes, inode)
-
-			mode := node.Mode
-
-			genericAttributes := []restic.Attribute{}
-			if node.attributes != nil {
-				//Add directory attributes
-				genericAttributes = append(genericAttributes, getFileAttributes(node.attributes, true))
-			}
-
-			err := tree.Insert(&restic.Node{
-				Type:              "dir",
-				Mode:              mode,
-				ModTime:           node.ModTime,
-				Name:              name,
-				UID:               uint32(os.Getuid()),
-				GID:               uint32(os.Getgid()),
-				Subtree:           &id,
-				GenericAttributes: genericAttributes,
-			})
-			rtest.OK(t, err)
-		default:
-			t.Fatalf("unknown node type %T", node)
-		}
-	}
-
-	id, err := restic.SaveTree(ctx, repo, tree)
-	rtest.OK(t, err)
-
-	return id
+	sn, _ := saveSnapshot(t, repo, Snapshot{
+		Nodes: nodesMap,
+	}, getFileAttributes)
+	res := NewRestorer(repo, sn, false, nil)
+	return res
 }
 
-func GetAttributeValue(attr *Attributes) uint32 {
+func getAttributeValue(attr *Attributes) uint32 {
 	var fileattr uint32
 	if attr.ReadOnly {
 		fileattr |= windows.FILE_ATTRIBUTE_READONLY
@@ -427,7 +290,7 @@ func GetAttributeValue(attr *Attributes) uint32 {
 	return fileattr
 }
 
-func getNodes(dir string, mainNodeName string, order []int, streams []DataStreamInfo, isDirectory bool, attributes *Attributes) []NamedNode {
+func getNodes(dir string, mainNodeName string, order []int, streams []DataStreamInfo, isDirectory bool, attributes *Attributes) map[string]Node {
 	var mode os.FileMode
 	if isDirectory {
 		mode = os.FileMode(2147484159)
@@ -439,19 +302,15 @@ func getNodes(dir string, mainNodeName string, order []int, streams []DataStream
 		}
 	}
 
-	getFileNodes := func() []NamedNode {
-		nodes := []NamedNode{}
+	getFileNodes := func() map[string]Node {
+		nodes := map[string]Node{}
 		if isDirectory {
 			//Add a directory node at the same level as the other streams
-			nodes = append(nodes, NamedNode{
-				name: mainNodeName,
-				node: OrderedDir{
-					ModTime:    time.Now(),
-					attributes: attributes,
-					Mode:       mode,
-				},
+			nodes[mainNodeName] = Dir{
+				ModTime:    time.Now(),
 				attributes: attributes,
-			})
+				Mode:       mode,
+			}
 		}
 
 		if len(streams) > 0 {
@@ -466,28 +325,22 @@ func getNodes(dir string, mainNodeName string, order []int, streams []DataStream
 					attr = &Attributes{Encrypted: true}
 				}
 
-				nodes = append(nodes, NamedNode{
-					name: stream.name,
-					node: File{
-						ModTime: time.Now(),
-						Data:    stream.data,
-						Mode:    mode,
-					},
+				nodes[stream.name] = File{
+					ModTime:    time.Now(),
+					Data:       stream.data,
+					Mode:       mode,
 					attributes: attr,
-				})
+				}
 			}
 		}
 		return nodes
 	}
 
-	return []NamedNode{
-		{
-			name: dir,
-			node: OrderedDir{
-				Mode:    normalizeFileMode(0750 | mode),
-				ModTime: time.Now(),
-				Nodes:   getFileNodes(),
-			},
+	return map[string]Node{
+		dir: Dir{
+			Mode:    normalizeFileMode(0750 | mode),
+			ModTime: time.Now(),
+			Nodes:   getFileNodes(),
 		},
 	}
 }
