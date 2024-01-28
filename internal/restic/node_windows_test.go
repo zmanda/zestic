@@ -218,12 +218,12 @@ func runGenericAttributesTest(t *testing.T, tempDir string, genericAttributeName
 func runGenericAttributesTestForNodes(t *testing.T, expectedNodes []restic.Node, tempDir string, genericAttr restic.GenericAttributeType, genericAttributeExpected []byte) {
 
 	for _, testNode := range expectedNodes {
-		testPath, node := restoreAndGetNode(t, tempDir, testNode, genericAttr)
+		testPath, node := restoreAndGetNode(t, tempDir, testNode)
 		test.Equals(t, genericAttributeExpected, node.GetGenericAttribute(genericAttr), "Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(genericAttr), testPath)
 	}
 }
 
-func restoreAndGetNode(t *testing.T, tempDir string, testNode restic.Node, genericAttr restic.GenericAttributeType) (string, *restic.Node) {
+func restoreAndGetNode(t *testing.T, tempDir string, testNode restic.Node) (string, *restic.Node) {
 	testPath := filepath.Join(tempDir, "001", testNode.Name)
 	err := os.MkdirAll(filepath.Dir(testPath), testNode.Mode)
 	test.OK(t, errors.Wrapf(err, "Failed to create parent directories for: %s", testPath))
@@ -278,7 +278,7 @@ func TestNewGenericAttributeType(t *testing.T) {
 		},
 	}
 	for _, testNode := range expectedNodes {
-		testPath, node := restoreAndGetNode(t, tempDir, testNode, TypeSomeNewAttribute)
+		testPath, node := restoreAndGetNode(t, tempDir, testNode)
 		//Since this GenericAttribute is unknown to this version of the software, it will not get set on the file.
 		test.Equals(t, []byte(nil), node.GetGenericAttribute(TypeSomeNewAttribute), "Unknown Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(TypeSomeNewAttribute), testPath)
 	}

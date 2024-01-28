@@ -157,8 +157,7 @@ func (node *Node) appendGenericAttribute(genericAttribute Attribute) {
 
 // getFileAttributes gets the value for the GenericAttribute TypeFileAttribute
 func getFileAttributes(fileattr uint32) (fileAttribute Attribute) {
-	fileAttrData := UInt32ToBytes(fileattr)
-	return NewGenericAttribute(TypeFileAttribute, fileAttrData)
+	return NewGenericAttribute(TypeFileAttribute, UInt32ToBytes(fileattr))
 }
 
 // UInt32ToBytes converts a uint32 value to a byte array
