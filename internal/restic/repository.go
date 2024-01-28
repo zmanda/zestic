@@ -89,6 +89,13 @@ type PackBlobs struct {
 	Blobs  []Blob
 }
 
+type MasterIndexSaveOpts struct {
+	SaveProgress   *progress.Counter
+	DeleteProgress func() *progress.Counter
+	DeleteReport   func(id ID, err error)
+	SkipDeletion   bool
+}
+
 // MasterIndex keeps track of the blobs are stored within files.
 type MasterIndex interface {
 	Has(BlobHandle) bool
@@ -99,10 +106,15 @@ type MasterIndex interface {
 	Each(ctx context.Context, fn func(PackedBlob))
 	ListPacks(ctx context.Context, packs IDSet) <-chan PackBlobs
 
-	Save(ctx context.Context, repo SaverUnpacked, packBlacklist IDSet, extraObsolete IDs, p *progress.Counter) (obsolete IDSet, err error)
+	Save(ctx context.Context, repo Repository, excludePacks IDSet, extraObsolete IDs, opts MasterIndexSaveOpts) error
 }
 
 // Lister allows listing files in a backend.
 type Lister interface {
 	List(ctx context.Context, t FileType, fn func(ID, int64) error) error
+}
+
+type ListerLoaderUnpacked interface {
+	Lister
+	LoaderUnpacked
 }

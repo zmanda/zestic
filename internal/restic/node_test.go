@@ -177,7 +177,7 @@ var nodeTests = []restic.Node{
 		ModTime:    parseTime("2005-05-14 21:07:03.111"),
 		AccessTime: parseTime("2005-05-14 21:07:04.222"),
 		ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-		ExtendedAttributes: []restic.ExtendedAttribute{
+		ExtendedAttributes: []restic.Attribute{
 			{"user.foo", []byte("bar")},
 		},
 	},
@@ -191,7 +191,7 @@ var nodeTests = []restic.Node{
 		ModTime:    parseTime("2005-05-14 21:07:03.111"),
 		AccessTime: parseTime("2005-05-14 21:07:04.222"),
 		ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-		ExtendedAttributes: []restic.ExtendedAttribute{
+		ExtendedAttributes: []restic.Attribute{
 			{"user.foo", []byte("bar")},
 		},
 	},
