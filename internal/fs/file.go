@@ -130,10 +130,9 @@ func IsAccessDenied(err error) bool {
 	return os.IsPermission(err)
 }
 
-// ClearReadonly will make the file writable.
-func ClearReadonly(path string) error {
-	// If file is not writable, make it writable
-	// Set the new file permissions
+// ResetPermissions resets the permissions of the file at the specified path
+func ResetPermissions(path string) error {
+	// Set the default file permissions
 	if err := os.Chmod(path, 0600); err != nil {
 		return err
 	}

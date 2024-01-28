@@ -1,7 +1,6 @@
 package restic
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -167,13 +166,13 @@ func (node *Node) fillExtendedAttributes(path string) (err error) {
 
 // restoreGenericAttributes restores generic attributes for Windows
 func (node Node) restoreGenericAttributes(path string) (err error) {
+	var errs []error
 	for _, attr := range node.GenericAttributes {
-		if errGen := attr.restoreGenericAttribute(path); errGen != nil {
-			err = fmt.Errorf("Error restoring generic attribute for: %s : %v", path, errGen)
-			debug.Log("%v", err)
+		if errGen := restoreGenericAttribute(attr, path); errGen != nil {
+			errs = append(errs, fmt.Errorf("error restoring generic attribute for: %s : %v", path, errGen))
 		}
 	}
-	return err
+	return errors.CombineErrors(errs...)
 }
 
 // fillGenericAttributes fills in the generic attributes for windows like File Attributes,
@@ -193,7 +192,7 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 		node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
 
 		//Add Creation Time
-		node.appendGenericAttribute(getCreationTime(fi, path))
+		node.appendGenericAttribute(GetCreationTime(fi, path))
 	}
 
 	if node.Type == "file" || node.Type == "dir" {
@@ -207,17 +206,15 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 }
 
 // appendGenericAttribute appends a GenericAttribute to the node
-func (node *Node) appendGenericAttribute(genericAttribute GenericAttribute) {
+func (node *Node) appendGenericAttribute(genericAttribute Attribute) {
 	if genericAttribute.Name != "" {
 		node.GenericAttributes = append(node.GenericAttributes, genericAttribute)
 	}
 }
 
 // getFileAttributes gets the value for the GenericAttribute TypeFileAttribute
-func getFileAttributes(fileattr uint32) (fileAttribute GenericAttribute) {
-	fileAttrData := UInt32ToBytes(fileattr)
-	fileAttribute = NewGenericAttribute(TypeFileAttribute, fileAttrData)
-	return fileAttribute
+func getFileAttributes(fileattr uint32) (fileAttribute Attribute) {
+	return NewGenericAttribute(TypeFileAttribute, UInt32ToBytes(fileattr))
 }
 
 // UInt32ToBytes converts a uint32 value to a byte array
@@ -227,12 +224,12 @@ func UInt32ToBytes(value uint32) (bytes []byte) {
 	return bytes
 }
 
-// getCreationTime gets the value for the GenericAttribute TypeCreationTime in a windows specific time format.
+// GetCreationTime gets the value for the GenericAttribute TypeCreationTime in a windows specific time format.
 // The value is a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC)
 // split into two 32-bit parts: the low-order DWORD and the high-order DWORD for efficiency and interoperability.
 // The low-order DWORD represents the number of 100-nanosecond intervals elapsed since January 1, 1601, modulo
 // 2^32. The high-order DWORD represents the number of times the low-order DWORD has overflowed.
-func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute GenericAttribute) {
+func GetCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Attribute) {
 	attrib, success := fi.Sys().(*syscall.Win32FileAttributeData)
 	if success && attrib != nil {
 		var creationTime [8]byte
@@ -248,7 +245,7 @@ func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Generic
 // getSecurityDescriptor function retrieves the GenericAttribute containing the byte representation
 // of the Security Descriptor. This byte representation is obtained from the encoded string form of
 // the raw binary Security Descriptor associated with the Windows file or folder.
-func getSecurityDescriptor(path string) (sdAttribute GenericAttribute, err error) {
+func getSecurityDescriptor(path string) (sdAttribute Attribute, err error) {
 	sd, err := fs.GetFileSecurityDescriptor(path)
 	if err != nil {
 		//If backup privilege was already enabled, then this is not an initialization issue as admin permission would be needed for this step.
@@ -294,7 +291,7 @@ func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute
 
 // restoreGenericAttribute restores the generic attributes for Windows like File Attributes,
 // Created time, Security Descriptor etc.
-func (attr GenericAttribute) restoreGenericAttribute(path string) error {
+func restoreGenericAttribute(attr Attribute, path string) error {
 	switch attr.Name {
 	case string(TypeFileAttribute):
 		return handleFileAttributes(path, attr.Value)
@@ -327,6 +324,7 @@ func handleFileAttributes(path string, data []byte) (err error) {
 // marked encrypted, it removes the FILE_ATTRIBUTE_ENCRYPTED.
 func fixEncryptionAttribute(path string, attrs uint32, pathPointer *uint16) (err error) {
 	if attrs&windows.FILE_ATTRIBUTE_ENCRYPTED != 0 {
+		// File should be encrypted.
 		err = encryptFile(pathPointer)
 		if err != nil {
 			if fs.IsAccessDenied(err) {
@@ -335,7 +333,7 @@ func fixEncryptionAttribute(path string, attrs uint32, pathPointer *uint16) (err
 				// The readonly and system flags will be set again at the end of this func if they are needed.
 				err = fs.ClearSystem(path)
 				if err != nil {
-					return fmt.Errorf("failed to encrypt file: failed to clear readonly/system flag: %s : %v", path, err)
+					return fmt.Errorf("failed to encrypt file: failed to clear system flag: %s : %v", path, err)
 				}
 				err = encryptFile(pathPointer)
 				if err != nil {
@@ -355,24 +353,44 @@ func fixEncryptionAttribute(path string, attrs uint32, pathPointer *uint16) (err
 			err = decryptFile(pathPointer)
 			if err != nil {
 				if fs.IsAccessDenied(err) {
-					// If existing file already has readonly or system flag, encrypt file call fails.
+					// If existing file already has readonly or system flag, decrypt file call fails.
 					// We have already cleared readonly flag, clearing system flag if needed.
 					// The readonly and system flags will be set again after this func if they are needed.
 					err = fs.ClearSystem(path)
 					if err != nil {
-						return fmt.Errorf("failed to encrypt file: failed to clear readonly/system flag: %s : %v", path, err)
+						return fmt.Errorf("failed to decrypt file: failed to clear system flag: %s : %v", path, err)
 					}
 					err = decryptFile(pathPointer)
 					if err != nil {
-						return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+						return fmt.Errorf("failed to decrypt file: %s : %v", path, err)
 					}
 				} else {
-					return fmt.Errorf("failed to encrypt file: %s : %v", path, err)
+					return fmt.Errorf("failed to decrypt file: %s : %v", path, err)
 				}
 			}
 		}
 	}
 	return err
+}
+
+// encryptFile set the encrypted flag on the file.
+func encryptFile(pathPointer *uint16) error {
+	// Call EncryptFile function
+	ret, _, err := procEncryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
+	if ret == 0 {
+		return err
+	}
+	return nil
+}
+
+// decryptFile removes the encrypted flag from the file.
+func decryptFile(pathPointer *uint16) error {
+	// Call DecryptFile function
+	ret, _, err := procDecryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
+	if ret == 0 {
+		return err
+	}
+	return nil
 }
 
 // handleCreationTime gets the creation time from the data and sets it to the file/folder at
@@ -395,43 +413,14 @@ func handleCreationTime(path string, data []byte) (err error) {
 		}
 	}()
 
-	var inputData bytes.Buffer
-	inputData.Write(data)
-
 	var creationTime syscall.Filetime
 	creationTime.LowDateTime = binary.LittleEndian.Uint32(data[0:4])
 	creationTime.HighDateTime = binary.LittleEndian.Uint32(data[4:8])
-	if err := syscall.SetFileTime(handle, &creationTime, nil, nil); err != nil {
-		return err
-	}
-	return nil
+	return syscall.SetFileTime(handle, &creationTime, nil, nil)
 }
 
 // handleSecurityDescriptor gets the Security Descriptor from the data and sets it to the file/folder at
 // the specified path.
 func handleSecurityDescriptor(path string, data []byte) error {
-	sd := string(data)
-
-	err := fs.SetFileSecurityDescriptor(path, sd)
-	return err
-}
-
-// encryptFile set the encrypted flag on the file.
-func encryptFile(pathPointer *uint16) error {
-	// Call EncryptFile function
-	ret, _, err := procEncryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
-	if ret == 0 {
-		return err
-	}
-	return nil
-}
-
-// decryptFile removes the encrypted flag from the file.
-func decryptFile(pathPointer *uint16) error {
-	// Call DecryptFile function
-	ret, _, err := procDecryptFile.Call(uintptr(unsafe.Pointer(pathPointer)))
-	if ret == 0 {
-		return err
-	}
-	return nil
+	return fs.SetFileSecurityDescriptor(path, string(data))
 }
