@@ -567,13 +567,13 @@ func sameAttributes(attributes []Attribute, otherAttributes []Attribute) bool {
 		value   []byte
 		present bool
 	}
-	attributesConverted := make(map[string]mapvalue)
+	attributesMap := make(map[string]mapvalue)
 	for _, attr := range attributes {
-		attributesConverted[attr.Name] = mapvalue{value: attr.Value}
+		attributesMap[attr.Name] = mapvalue{value: attr.Value}
 	}
 
 	for _, attr := range otherAttributes {
-		v, ok := attributesConverted[attr.Name]
+		v, ok := attributesMap[attr.Name]
 		if !ok {
 			// extended attribute is not set for node
 			debug.Log("other node has attribute %v, which is not present in node", attr.Name)
@@ -589,11 +589,11 @@ func sameAttributes(attributes []Attribute, otherAttributes []Attribute) bool {
 
 		// remember that this attribute is present in other.
 		v.present = true
-		attributesConverted[attr.Name] = v
+		attributesMap[attr.Name] = v
 	}
 
 	// check for attributes that are not present in other
-	for name, v := range attributesConverted {
+	for name, v := range attributesMap {
 		if !v.present {
 			debug.Log("attribute %v not present in other node", name)
 			return false
