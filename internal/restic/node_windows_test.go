@@ -4,6 +4,7 @@
 package restic_test
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +12,102 @@ import (
 	"testing"
 
 	"github.com/restic/restic/internal/errors"
+	"github.com/restic/restic/internal/fs"
 	"github.com/restic/restic/internal/restic"
 	"github.com/restic/restic/internal/test"
 	"golang.org/x/sys/windows"
 )
+
+func TestRestoreSecurityDescriptors(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	expectedNodes := []restic.Node{
+		{
+			Name:       "testfile",
+			Type:       "file",
+			Mode:       0644,
+			ModTime:    parseTime("2005-05-14 21:07:03.111"),
+			AccessTime: parseTime("2005-05-14 21:07:04.222"),
+			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
+			GenericAttributes: []restic.Attribute{
+				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvqAwAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIAfAAEAAAAAAAkAKkAEgABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvtAwAAAAAUAP8BHwABAQAAAAAABRIAAAAAABgA/wEfAAECAAAAAAAFIAAAACACAAAAACQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAA=")),
+			},
+		},
+		{
+			Name:       "testfile2",
+			Type:       "file",
+			Mode:       0644,
+			ModTime:    parseTime("2005-05-14 21:07:03.111"),
+			AccessTime: parseTime("2005-05-14 21:07:04.222"),
+			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
+			GenericAttributes: []restic.Attribute{
+				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAA7AAAAEwAAAABBQAAAAAABRUAAAAvr7t03PyHGk2FokNHCAAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIAoAAFAAAAAAAkAP8BHwABBQAAAAAABRUAAAAvr7t03PyHGk2FokNHCAAAAAAkAKkAEgABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvtAwAAAAAUAP8BHwABAQAAAAAABRIAAAAAABgA/wEfAAECAAAAAAAFIAAAACACAAAAACQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAACAHQAAwAAAAKAJAC/AQIAAQUAAAAAAAUVAAAAL6+7dNz8hxpNhaJDtgQAAALAJAC/AQMAAQUAAAAAAAUVAAAAL6+7dNz8hxpNhaJDPgkAAAJAJAD/AQ8AAQUAAAAAAAUVAAAAL6+7dNz8hxpNhaJDtQQAAA==")),
+			},
+		},
+		{
+			Name:       "testdirectory",
+			Type:       "dir",
+			Mode:       0755,
+			ModTime:    parseTime("2005-05-14 21:07:03.111"),
+			AccessTime: parseTime("2005-05-14 21:07:04.222"),
+			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
+			GenericAttributes: []restic.Attribute{
+				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvqAwAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIAfAAEAAAAAAAkAKkAEgABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvtAwAAAAMUAP8BHwABAQAAAAAABRIAAAAAAxgA/wEfAAECAAAAAAAFIAAAACACAAAAAyQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAA=")),
+			},
+		},
+		{
+			Name:       "testdirectory2",
+			Type:       "dir",
+			Mode:       0755,
+			ModTime:    parseTime("2005-05-14 21:07:03.111"),
+			AccessTime: parseTime("2005-05-14 21:07:04.222"),
+			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
+			GenericAttributes: []restic.Attribute{
+				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvqAwAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIA3AAIAAAAAAIUAKkAEgABAQAAAAAABQcAAAAAAxQAiQASAAEBAAAAAAAFBwAAAAAAJACpABIAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSar7QMAAAAAJAC/ARMAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSar6gMAAAALFAC/ARMAAQEAAAAAAAMAAAAAAAMUAP8BHwABAQAAAAAABRIAAAAAAxgA/wEfAAECAAAAAAAFIAAAACACAAAAAyQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAA=")),
+			},
+		},
+	}
+	for _, testNode := range expectedNodes {
+		testPath, node := restoreAndGetNode(t, tempDir, testNode)
+
+		sd, err := fs.GetFileSecurityDescriptor(testPath)
+
+		test.Assert(t, err == nil, "Error while getting the security descriptor")
+
+		testSD := string(node.GetGenericAttribute(restic.TypeSecurityDescriptor))
+		sdBytesTest, err := base64.StdEncoding.DecodeString(testSD)
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
+		sdInput, err := fs.SecurityDescriptorBytesToStruct(sdBytesTest)
+
+		test.OK(t, errors.Wrapf(err, "Error converting SD to struct for: %s", testPath))
+
+		sdBytesOutput, err := base64.StdEncoding.DecodeString(sd)
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
+
+		sdOutput, err := fs.SecurityDescriptorBytesToStruct(sdBytesOutput)
+		test.OK(t, errors.Wrapf(err, "Error converting Output SD to struct for: %s", testPath))
+
+		test.Equals(t, sdInput, sdOutput, "SecurityDescriptors not equal for path: %s", testPath)
+
+		fi, err := os.Lstat(testPath)
+		test.OK(t, errors.Wrapf(err, "Error running Lstat for: %s", testPath))
+
+		nodeFromFileInfo, err := restic.NodeFromFileInfo(testPath, fi)
+		test.OK(t, errors.Wrapf(err, "Error getting node from fileInfo for: %s", testPath))
+
+		sdNodeFromFileInfoInput := sdOutput
+
+		sdBytesFromNode := nodeFromFileInfo.GetGenericAttribute(restic.TypeSecurityDescriptor)
+
+		sdByteNodeOutput, err := base64.StdEncoding.DecodeString(string(sdBytesFromNode))
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
+
+		sdNodeFromFileInfoOutput, err := fs.SecurityDescriptorBytesToStruct(sdByteNodeOutput)
+		test.OK(t, errors.Wrapf(err, "Error converting SD Output Node to struct for: %s", testPath))
+
+		test.Equals(t, sdNodeFromFileInfoInput, sdNodeFromFileInfoOutput, "SecurityDescriptors got from NodeFromFileInfo not equal for path: %s", testPath)
+	}
+}
 
 func TestRestoreCreationTime(t *testing.T) {
 	t.Parallel()

@@ -48,6 +48,8 @@ const (
 	TypeFileAttribute GenericAttributeType = "WinFileAttrib"
 	// TypeCreationTime is the GenericAttributeType used for storing creation time within the generic attributes map.
 	TypeCreationTime GenericAttributeType = "WinCreationTime"
+	// TypeSecurityDescriptor is the GenericAttributeType used for storing security descriptor for windows within the generic attributes map.
+	TypeSecurityDescriptor GenericAttributeType = "WinSecurityDesc"
 
 	//Generic Attributes for other OS types should be defined here.
 )
@@ -55,8 +57,9 @@ const (
 // When you create new GenericAttributeTypes for any OS, add an entry in this map.
 var genericAttributesForOS = map[GenericAttributeType][]OSType{
 	//value is an array as some generic attributes may be handled in multiple OSs.
-	TypeFileAttribute: {WindowsOS},
-	TypeCreationTime:  {WindowsOS},
+	TypeFileAttribute:      {WindowsOS},
+	TypeCreationTime:       {WindowsOS},
+	TypeSecurityDescriptor: {WindowsOS},
 }
 
 // Node is a file, directory or other item in a backup.

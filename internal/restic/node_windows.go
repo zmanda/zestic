@@ -119,7 +119,7 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 }
 
 // fillGenericAttributes fills in the generic attributes for windows like File Attributes,
-// Created time etc.
+// Created time, Security Descriptor etc.
 func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
 	if strings.Contains(filepath.Base(path), ":") {
 		//Do not process for Alternate Data Streams in Windows
@@ -137,7 +137,15 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 		//Add Creation Time
 		node.appendGenericAttribute(GetCreationTime(fi, path))
 	}
-	return true, nil
+
+	if node.Type == "file" || node.Type == "dir" {
+		sd, err := getSecurityDescriptor(path)
+		if err == nil {
+			//Add Security Descriptor
+			node.appendGenericAttribute(sd)
+		}
+	}
+	return true, err
 }
 
 // appendGenericAttribute appends a GenericAttribute to the node
@@ -177,14 +185,33 @@ func GetCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Attribu
 	return creationTimeAttribute
 }
 
-// restoreGenericAttribute restores the generic attributes for windows like File Attributes,
-// Created time etc.
+// getSecurityDescriptor function retrieves the GenericAttribute containing the byte representation
+// of the Security Descriptor. This byte representation is obtained from the encoded string form of
+// the raw binary Security Descriptor associated with the Windows file or folder.
+func getSecurityDescriptor(path string) (sdAttribute Attribute, err error) {
+	sd, err := fs.GetFileSecurityDescriptor(path)
+	if err != nil {
+		//If backup privilege was already enabled, then this is not an initialization issue as admin permission would be needed for this step.
+		//This is a specific error, logging it in debug for now.
+		err = fmt.Errorf("Error getting file SecurityDescriptor for: %s : %v", path, err)
+		debug.Log("%v", err)
+		return sdAttribute, err
+	} else if sd != "" {
+		sdAttribute = NewGenericAttribute(TypeSecurityDescriptor, []byte(sd))
+	}
+	return sdAttribute, nil
+}
+
+// restoreGenericAttribute restores the generic attributes for Windows like File Attributes,
+// Created time, Security Descriptor etc.
 func restoreGenericAttribute(attr Attribute, path string) error {
 	switch attr.Name {
 	case string(TypeFileAttribute):
 		return handleFileAttributes(path, attr.Value)
 	case string(TypeCreationTime):
 		return handleCreationTime(path, attr.Value)
+	case string(TypeSecurityDescriptor):
+		return handleSecurityDescriptor(path, attr.Value)
 	}
 	handleUnknownGenericAttributeFound(attr.Name)
 	return nil
@@ -303,4 +330,10 @@ func handleCreationTime(path string, data []byte) (err error) {
 	creationTime.LowDateTime = binary.LittleEndian.Uint32(data[0:4])
 	creationTime.HighDateTime = binary.LittleEndian.Uint32(data[4:8])
 	return syscall.SetFileTime(handle, &creationTime, nil, nil)
+}
+
+// handleSecurityDescriptor gets the Security Descriptor from the data and sets it to the file/folder at
+// the specified path.
+func handleSecurityDescriptor(path string, data []byte) error {
+	return fs.SetFileSecurityDescriptor(path, string(data))
 }
