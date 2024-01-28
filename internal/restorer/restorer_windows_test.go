@@ -61,6 +61,14 @@ type NodeInfo struct {
 }
 
 func TestFileAttributeCombination(t *testing.T) {
+	testFileAttributeCombination(t, false)
+}
+
+func TestEmptyFileAttributeCombination(t *testing.T) {
+	testFileAttributeCombination(t, true)
+}
+
+func testFileAttributeCombination(t *testing.T, isEmpty bool) {
 	t.Parallel()
 	//Generate combination of 5 attributes.
 	attributeCombinations := generateCombinations(5, []bool{})
@@ -71,19 +79,10 @@ func TestFileAttributeCombination(t *testing.T) {
 
 		//Set up the required file information
 		fileInfo := NodeInfo{
-			DataStreamInfo: DataStreamInfo{
-				name: fileName,
-				data: "Main file data stream.",
-			},
-			parentDir: "dir",
-			attributes: Attributes{
-				ReadOnly:  attr1[0],
-				Hidden:    attr1[1],
-				System:    attr1[2],
-				Archive:   attr1[3],
-				Encrypted: attr1[4],
-			},
-			Exists: false,
+			DataStreamInfo: getDataStreamInfo(isEmpty, fileName),
+			parentDir:      "dir",
+			attributes:     getFileAttributes(attr1),
+			Exists:         false,
 		}
 
 		//Get the current test name
@@ -93,8 +92,7 @@ func TestFileAttributeCombination(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			mainFilePath := runAttributeTests(t, fileInfo, fileInfo.attributes)
 
-			//Check main file restore
-			verifyMainFileRestore(t, mainFilePath, fileInfo)
+			verifyFileRestores(isEmpty, mainFilePath, t, fileInfo)
 		})
 	}
 }
@@ -115,6 +113,31 @@ func generateCombinations(n int, prefix []bool) [][]bool {
 
 	// Combine combinations with True and False
 	return append(permsTrue, permsFalse...)
+}
+
+func getDataStreamInfo(isEmpty bool, fileName string) DataStreamInfo {
+	var dataStreamInfo DataStreamInfo
+	if isEmpty {
+		dataStreamInfo = DataStreamInfo{
+			name: fileName,
+		}
+	} else {
+		dataStreamInfo = DataStreamInfo{
+			name: fileName,
+			data: "Main file data stream.",
+		}
+	}
+	return dataStreamInfo
+}
+
+func getFileAttributes(values []bool) Attributes {
+	return Attributes{
+		ReadOnly:  values[0],
+		Hidden:    values[1],
+		System:    values[2],
+		Archive:   values[3],
+		Encrypted: values[4],
+	}
 }
 
 func getCombinationTestName(fi NodeInfo, fileName string, existingAttr Attributes) string {
@@ -379,6 +402,16 @@ func verifyAttributes(t *testing.T, mainFilePath string, attr Attributes) {
 	}
 }
 
+func verifyFileRestores(isEmpty bool, mainFilePath string, t *testing.T, fileInfo NodeInfo) {
+	if isEmpty {
+		_, err1 := os.Stat(mainFilePath)
+		rtest.Assert(t, !errors.Is(err1, os.ErrNotExist), "The file "+fileInfo.name+" does not exist")
+	} else {
+
+		verifyMainFileRestore(t, mainFilePath, fileInfo)
+	}
+}
+
 func verifyMainFileRestore(t *testing.T, mainFilePath string, fileInfo NodeInfo) {
 	fi, err1 := os.Stat(mainFilePath)
 	rtest.Assert(t, !errors.Is(err1, os.ErrNotExist), "The file "+fileInfo.name+" does not exist")
@@ -404,14 +437,8 @@ func TestDirAttributeCombination(t *testing.T) {
 			DataStreamInfo: DataStreamInfo{
 				name: dirName,
 			},
-			parentDir: "dir",
-			attributes: Attributes{
-				// readonly not valid for directories
-				Hidden:    attr1[0],
-				System:    attr1[1],
-				Archive:   attr1[2],
-				Encrypted: attr1[3],
-			},
+			parentDir:   "dir",
+			attributes:  getDirAttributes(attr1),
 			Exists:      false,
 			IsDirectory: true,
 		}
@@ -421,16 +448,34 @@ func TestDirAttributeCombination(t *testing.T) {
 
 		//Run test
 		t.Run(testName, func(t *testing.T) {
-			mainFilePath := runAttributeTests(t, dirInfo, dirInfo.attributes)
+			mainDirPath := runAttributeTests(t, dirInfo, dirInfo.attributes)
 
 			//Check directory exists
-			_, err1 := os.Stat(mainFilePath)
+			_, err1 := os.Stat(mainDirPath)
 			rtest.Assert(t, !errors.Is(err1, os.ErrNotExist), "The directory "+dirInfo.name+" does not exist")
 		})
 	}
 }
 
+func getDirAttributes(values []bool) Attributes {
+	return Attributes{
+		// readonly not valid for directories
+		Hidden:    values[0],
+		System:    values[1],
+		Archive:   values[2],
+		Encrypted: values[3],
+	}
+}
+
 func TestFileAttributeCombinationsOverwrite(t *testing.T) {
+	testFileAttributeCombinationsOverwrite(t, false)
+}
+
+func TestEmptyFileAttributeCombinationsOverwrite(t *testing.T) {
+	testFileAttributeCombinationsOverwrite(t, true)
+}
+
+func testFileAttributeCombinationsOverwrite(t *testing.T, isEmpty bool) {
 	t.Parallel()
 	//Get attribute combinations
 	attributeCombinations := generateCombinations(5, []bool{})
@@ -443,31 +488,16 @@ func TestFileAttributeCombinationsOverwrite(t *testing.T) {
 	for _, attr1 := range attributeCombinations {
 
 		fileInfo := NodeInfo{
-			DataStreamInfo: DataStreamInfo{
-				name: fileName,
-				data: "Main file data stream.",
-			},
-			parentDir: "dir",
-			attributes: Attributes{
-				ReadOnly:  attr1[0],
-				Hidden:    attr1[1],
-				System:    attr1[2],
-				Archive:   attr1[3],
-				Encrypted: attr1[4],
-			},
-			Exists: true,
+			DataStreamInfo: getDataStreamInfo(isEmpty, fileName),
+			parentDir:      "dir",
+			attributes:     getFileAttributes(attr1),
+			Exists:         true,
 		}
 
 		existingFileAttribute := []Attributes{}
 
 		for _, overwrite := range overwriteCombinations {
-			existingFileAttribute = append(existingFileAttribute, Attributes{
-				ReadOnly:  overwrite[0],
-				Hidden:    overwrite[1],
-				Encrypted: overwrite[2],
-				System:    overwrite[3],
-				Archive:   overwrite[4],
-			})
+			existingFileAttribute = append(existingFileAttribute, getFileAttributes(overwrite))
 		}
 
 		//Iterate through each existing attribute combination
@@ -479,8 +509,52 @@ func TestFileAttributeCombinationsOverwrite(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				mainFilePath := runAttributeTests(t, fileInfo, existingFileAttr)
 
-				//Check main file restore
-				verifyMainFileRestore(t, mainFilePath, fileInfo)
+				verifyFileRestores(isEmpty, mainFilePath, t, fileInfo)
+			})
+		}
+	}
+}
+
+func TestDirAttributeCombinationsOverwrite(t *testing.T) {
+	t.Parallel()
+	//Get attribute combinations
+	attributeCombinations := generateCombinations(4, []bool{})
+	//Get existing dir attribute combinations
+	overwriteCombinations := generateCombinations(4, []bool{})
+
+	dirName := "TestOverwriteDir"
+
+	//Iterate through each attribute combination
+	for _, attr1 := range attributeCombinations {
+
+		dirInfo := NodeInfo{
+			DataStreamInfo: DataStreamInfo{
+				name: dirName,
+			},
+			parentDir:   "dir",
+			attributes:  getDirAttributes(attr1),
+			Exists:      true,
+			IsDirectory: true,
+		}
+
+		existingDirAttribute := []Attributes{}
+
+		for _, overwrite := range overwriteCombinations {
+			existingDirAttribute = append(existingDirAttribute, getDirAttributes(overwrite))
+		}
+
+		//Iterate through each existing attribute combination
+		for _, existingFileAttr := range existingDirAttribute {
+			//Get the test name
+			testName := getCombinationTestName(dirInfo, dirName, existingFileAttr)
+
+			//Run test
+			t.Run(testName, func(t *testing.T) {
+				mainDirPath := runAttributeTests(t, dirInfo, dirInfo.attributes)
+
+				//Check directory exists
+				_, err1 := os.Stat(mainDirPath)
+				rtest.Assert(t, !errors.Is(err1, os.ErrNotExist), "The directory "+dirInfo.name+" does not exist")
 			})
 		}
 	}

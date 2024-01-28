@@ -17,6 +17,7 @@ import (
 )
 
 func TestRestoreCreationTime(t *testing.T) {
+	t.Parallel()
 	path := t.TempDir()
 	fi, err := os.Lstat(path)
 	test.OK(t, errors.Wrapf(err, "Could not Lstat for path: %s", path))
@@ -27,6 +28,7 @@ func TestRestoreCreationTime(t *testing.T) {
 }
 
 func TestRestoreFileAttributes(t *testing.T) {
+	t.Parallel()
 	genericAttributeName := restic.TypeFileAttribute
 	tempDir := t.TempDir()
 	fileAttributes := [][]byte{
@@ -63,6 +65,10 @@ func TestRestoreFileAttributes(t *testing.T) {
 		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY),
 		//encrypted
 		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | windows.FILE_ATTRIBUTE_ENCRYPTED),
+		//system
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | windows.FILE_ATTRIBUTE_SYSTEM),
+		//archive
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | windows.FILE_ATTRIBUTE_ARCHIVE),
 	}
 	for i, folderAttr := range folderAttributes {
 		expectedNodes := []restic.Node{
@@ -142,6 +148,7 @@ func restoreAndGetNode(t *testing.T, tempDir string, testNode restic.Node, gener
 const TypeSomeNewAttribute restic.GenericAttributeType = "someNewAttribute"
 
 func TestNewGenericAttributeType(t *testing.T) {
+	t.Parallel()
 	genericAttributeName := TypeSomeNewAttribute
 	tempDir := t.TempDir()
 	expectedNodes := []restic.Node{
