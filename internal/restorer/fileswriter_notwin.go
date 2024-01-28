@@ -20,10 +20,8 @@ func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInf
 // createSize is specified greater than 0 i.e. if the file hasn't already
 // been created. Otherwise it opens the file with only write only option.
 func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (file *os.File, err error) {
-	var f *os.File
-	var err error
 	if createSize >= 0 {
-		f, err = openFileWithCreate(path)
+		file, err = openFileWithCreate(path)
 		if fs.IsAccessDenied(err) {
 			// If file is readonly, clear the readonly flag by resetting the
 			// permissions of the file and try again
@@ -33,11 +31,11 @@ func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (fil
 			if err != nil {
 				return nil, err
 			}
-			f, err = openFileWithTruncWrite(path)
+			file, err = openFileWithTruncWrite(path)
 		}
 	} else {
 		flags := os.O_WRONLY
-		f, err = os.OpenFile(path, flags, 0600)
+		file, err = os.OpenFile(path, flags, 0600)
 	}
 	return file, err
 }
