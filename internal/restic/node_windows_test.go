@@ -5,7 +5,6 @@ package restic_test
 
 import (
 	"encoding/base64"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 )
 
 func TestRestoreExtendedAttributes(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	expectedNodes := []restic.Node{
 		{
@@ -30,7 +30,7 @@ func TestRestoreExtendedAttributes(t *testing.T) {
 			ModTime:    parseTime("2005-05-14 21:07:03.111"),
 			AccessTime: parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-			ExtendedAttributes: []restic.ExtendedAttribute{
+			ExtendedAttributes: []restic.Attribute{
 				{"user.foo", []byte("bar")},
 			},
 		},
@@ -41,35 +41,30 @@ func TestRestoreExtendedAttributes(t *testing.T) {
 			ModTime:    parseTime("2005-05-14 21:07:03.111"),
 			AccessTime: parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-			ExtendedAttributes: []restic.ExtendedAttribute{
+			ExtendedAttributes: []restic.Attribute{
 				{"user.foo", []byte("bar")},
 			},
 		},
 	}
 	for _, testNode := range expectedNodes {
 		testPath := filepath.Join(tempDir, "001", testNode.Name)
-		if err := os.MkdirAll(filepath.Dir(testPath), testNode.Mode); err != nil {
-			t.Fatalf("Failed to create parent directories: %v", err)
-		}
+		err := os.MkdirAll(filepath.Dir(testPath), testNode.Mode)
+		test.OK(t, errors.Wrapf(err, "Failed to create parent directories for: %s", testPath))
+
 		if testNode.Type == "file" {
 
 			testFile, err := os.Create(testPath)
-			if err != nil {
-				t.Fatalf("Failed to create test file: %v", err)
-			}
+			test.OK(t, errors.Wrapf(err, "Failed to create test file: %s", testPath))
 			testFile.Close()
 		} else if testNode.Type == "dir" {
 
 			err := os.Mkdir(testPath, testNode.Mode)
-			if err != nil {
-				t.Fatalf("Failed to create test directory: %v", err)
-			}
+			test.OK(t, errors.Wrapf(err, "Failed to create test directory for: %s", testPath))
 		}
 
-		err := testNode.RestoreMetadata(testPath)
-		if err != nil {
-			t.Fatalf("Error restoring metadata: %v", err)
-		}
+		err = testNode.RestoreMetadata(testPath)
+		test.OK(t, errors.Wrapf(err, "Error restoring metadata for: %s", testPath))
+
 		var handle windows.Handle
 		utf16Path := windows.StringToUTF16Ptr(testPath)
 		if testNode.Type == "file" {
@@ -77,21 +72,15 @@ func TestRestoreExtendedAttributes(t *testing.T) {
 		} else if testNode.Type == "dir" {
 			handle, err = windows.CreateFile(utf16Path, windows.FILE_READ_EA, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
 		}
-		if err != nil {
-			t.Fatalf("Error opening file/directory: %v", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error opening file/directory for: %s", testPath))
 		defer func() {
 			err := windows.Close(handle)
-			if err != nil {
-				t.Logf("Error closing file %s: %v\n", testPath, err)
-			}
+			test.OK(t, errors.Wrapf(err, "Error closing file for: %s", testPath))
 		}()
 
 		if len(testNode.ExtendedAttributes) > 0 {
 			extAttr, err := fs.GetFileEA(handle)
-			if err != nil {
-				t.Fatalf("Error getting extended attributes: %v", err)
-			}
+			test.OK(t, errors.Wrapf(err, "Error getting extended attributes for: %s", testPath))
 			test.Equals(t, len(testNode.ExtendedAttributes), len(extAttr))
 
 			for _, expectedExtAttr := range testNode.ExtendedAttributes {
@@ -111,6 +100,7 @@ func TestRestoreExtendedAttributes(t *testing.T) {
 }
 
 func TestRestoreSecurityDescriptors(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	expectedNodes := []restic.Node{
 		{
@@ -120,7 +110,7 @@ func TestRestoreSecurityDescriptors(t *testing.T) {
 			ModTime:    parseTime("2005-05-14 21:07:03.111"),
 			AccessTime: parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{
+			GenericAttributes: []restic.Attribute{
 				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvqAwAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIAfAAEAAAAAAAkAKkAEgABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvtAwAAAAAUAP8BHwABAQAAAAAABRIAAAAAABgA/wEfAAECAAAAAAAFIAAAACACAAAAACQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAA=")),
 			},
 		},
@@ -131,7 +121,7 @@ func TestRestoreSecurityDescriptors(t *testing.T) {
 			ModTime:    parseTime("2005-05-14 21:07:03.111"),
 			AccessTime: parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{
+			GenericAttributes: []restic.Attribute{
 				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAA7AAAAEwAAAABBQAAAAAABRUAAAAvr7t03PyHGk2FokNHCAAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIAoAAFAAAAAAAkAP8BHwABBQAAAAAABRUAAAAvr7t03PyHGk2FokNHCAAAAAAkAKkAEgABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvtAwAAAAAUAP8BHwABAQAAAAAABRIAAAAAABgA/wEfAAECAAAAAAAFIAAAACACAAAAACQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAACAHQAAwAAAAKAJAC/AQIAAQUAAAAAAAUVAAAAL6+7dNz8hxpNhaJDtgQAAALAJAC/AQMAAQUAAAAAAAUVAAAAL6+7dNz8hxpNhaJDPgkAAAJAJAD/AQ8AAQUAAAAAAAUVAAAAL6+7dNz8hxpNhaJDtQQAAA==")),
 			},
 		},
@@ -142,7 +132,7 @@ func TestRestoreSecurityDescriptors(t *testing.T) {
 			ModTime:    parseTime("2005-05-14 21:07:03.111"),
 			AccessTime: parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{
+			GenericAttributes: []restic.Attribute{
 				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvqAwAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIAfAAEAAAAAAAkAKkAEgABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvtAwAAAAMUAP8BHwABAQAAAAAABRIAAAAAAxgA/wEfAAECAAAAAAAFIAAAACACAAAAAyQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAA=")),
 			},
 		},
@@ -153,75 +143,66 @@ func TestRestoreSecurityDescriptors(t *testing.T) {
 			ModTime:    parseTime("2005-05-14 21:07:03.111"),
 			AccessTime: parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{
+			GenericAttributes: []restic.Attribute{
 				restic.NewGenericAttribute(restic.TypeSecurityDescriptor, []byte("AQAUvBQAAAAwAAAAAAAAAEwAAAABBQAAAAAABRUAAACIn1iuVqCC6sy9JqvqAwAAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSarAQIAAAIA3AAIAAAAAAIUAKkAEgABAQAAAAAABQcAAAAAAxQAiQASAAEBAAAAAAAFBwAAAAAAJACpABIAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSar7QMAAAAAJAC/ARMAAQUAAAAAAAUVAAAAiJ9YrlaggurMvSar6gMAAAALFAC/ARMAAQEAAAAAAAMAAAAAAAMUAP8BHwABAQAAAAAABRIAAAAAAxgA/wEfAAECAAAAAAAFIAAAACACAAAAAyQA/wEfAAEFAAAAAAAFFQAAAIifWK5WoILqzL0mq+oDAAA=")),
 			},
 		},
 	}
 	for _, testNode := range expectedNodes {
-		testPath := prepareTestAndRestoreMetadata(tempDir, testNode, t)
+		testPath, node := restoreAndGetNode(t, tempDir, testNode)
 
 		sd, err := fs.GetFileSecurityDescriptor(testPath)
 
 		test.Assert(t, err == nil, "Error while getting the security descriptor")
 
-		testSD := string(testNode.GetGenericAttribute(restic.TypeSecurityDescriptor))
+		testSD := string(node.GetGenericAttribute(restic.TypeSecurityDescriptor))
 		sdBytesTest, err := base64.StdEncoding.DecodeString(testSD)
-		if err != nil {
-			t.Fatalf("Error decoding SD: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
 		sdInput, err := fs.SecurityDescriptorBytesToStruct(sdBytesTest)
 
-		if err != nil {
-			t.Fatalf("Error converting SD to struct: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error converting SD to struct for: %s", testPath))
 
 		sdBytesOutput, err := base64.StdEncoding.DecodeString(sd)
-		if err != nil {
-			t.Fatalf("Error decoding SD: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
+
 		sdOutput, err := fs.SecurityDescriptorBytesToStruct(sdBytesOutput)
-		if err != nil {
-			t.Fatalf("Error converting Output SD to struct: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error converting Output SD to struct for: %s", testPath))
 
 		test.Equals(t, sdInput, sdOutput, "SecurityDescriptors not equal for path: %s", testPath)
 
 		fi, err := os.Lstat(testPath)
-		if err != nil {
-			t.Fatal(err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error running Lstat for: %s", testPath))
 
 		nodeFromFileInfo, err := restic.NodeFromFileInfo(testPath, fi)
-		if err != nil {
-			t.Fatal(err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error getting node from fileInfo for: %s", testPath))
 
 		sdNodeFromFileInfoInput := sdOutput
 
 		sdBytesFromNode := nodeFromFileInfo.GetGenericAttribute(restic.TypeSecurityDescriptor)
 
 		sdByteNodeOutput, err := base64.StdEncoding.DecodeString(string(sdBytesFromNode))
-		if err != nil {
-			t.Fatalf("Error decoding SD: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
+
 		sdNodeFromFileInfoOutput, err := fs.SecurityDescriptorBytesToStruct(sdByteNodeOutput)
-		if err != nil {
-			t.Fatalf("Error converting Output SD Through Node to struct: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error converting SD Output Node to struct for: %s", testPath))
 
 		test.Equals(t, sdNodeFromFileInfoInput, sdNodeFromFileInfoOutput, "SecurityDescriptors got from NodeFromFileInfo not equal for path: %s", testPath)
 	}
 }
 
 func TestRestoreCreationTime(t *testing.T) {
-	tempDir := t.TempDir()
+	t.Parallel()
+	path := t.TempDir()
+	fi, err := os.Lstat(path)
+	test.OK(t, errors.Wrapf(err, "Could not Lstat for path: %s", path))
+	creationTimeAttribute := restic.GetCreationTime(fi, path)
+	test.OK(t, errors.Wrapf(err, "Could not get creation time for path: %s", path))
 	//Using the temp dir creation time as the test creation time for the test file and folder
-	creationTime := getCreationTime(t, tempDir)
-	runGenericAttributesTest(tempDir, t, restic.TypeCreationTime, creationTime)
+	runGenericAttributesTest(t, path, restic.TypeCreationTime, creationTimeAttribute.Value)
 }
 
 func TestRestoreFileAttributes(t *testing.T) {
+	t.Parallel()
 	genericAttributeName := restic.TypeFileAttribute
 	tempDir := t.TempDir()
 	fileAttributes := [][]byte{
@@ -233,6 +214,8 @@ func TestRestoreFileAttributes(t *testing.T) {
 		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_SYSTEM),
 		//archive
 		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_ARCHIVE),
+		//encrypted
+		restic.UInt32ToBytes(windows.FILE_ATTRIBUTE_ENCRYPTED),
 	}
 	for i, fileAttr := range fileAttributes {
 		expectedNodes := []restic.Node{
@@ -243,10 +226,10 @@ func TestRestoreFileAttributes(t *testing.T) {
 				ModTime:           parseTime("2005-05-14 21:07:03.111"),
 				AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 				ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-				GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, fileAttr)},
+				GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, fileAttr)},
 			},
 		}
-		runGenericAttributesTestForNodes(expectedNodes, tempDir, t, genericAttributeName, fileAttr)
+		runGenericAttributesTestForNodes(t, expectedNodes, tempDir, genericAttributeName, fileAttr)
 	}
 
 	folderAttributes := [][]byte{
@@ -254,6 +237,12 @@ func TestRestoreFileAttributes(t *testing.T) {
 		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | syscall.FILE_ATTRIBUTE_HIDDEN),
 		//normal
 		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY),
+		//encrypted
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | windows.FILE_ATTRIBUTE_ENCRYPTED),
+		//system
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | windows.FILE_ATTRIBUTE_SYSTEM),
+		//archive
+		restic.UInt32ToBytes(syscall.FILE_ATTRIBUTE_DIRECTORY | windows.FILE_ATTRIBUTE_ARCHIVE),
 	}
 	for i, folderAttr := range folderAttributes {
 		expectedNodes := []restic.Node{
@@ -264,14 +253,14 @@ func TestRestoreFileAttributes(t *testing.T) {
 				ModTime:           parseTime("2005-05-14 21:07:03.111"),
 				AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 				ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-				GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, folderAttr)},
+				GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, folderAttr)},
 			},
 		}
-		runGenericAttributesTestForNodes(expectedNodes, tempDir, t, genericAttributeName, folderAttr)
+		runGenericAttributesTestForNodes(t, expectedNodes, tempDir, genericAttributeName, folderAttr)
 	}
 }
 
-func runGenericAttributesTest(tempDir string, t *testing.T, genericAttributeName restic.GenericAttributeType, genericAttributeExpected []byte) {
+func runGenericAttributesTest(t *testing.T, tempDir string, genericAttributeName restic.GenericAttributeType, genericAttributeExpected []byte) {
 	expectedNodes := []restic.Node{
 		{
 			Name:              "testfile",
@@ -280,7 +269,7 @@ func runGenericAttributesTest(tempDir string, t *testing.T, genericAttributeName
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
 		},
 		{
 			Name:              "testdirectory",
@@ -289,83 +278,51 @@ func runGenericAttributesTest(tempDir string, t *testing.T, genericAttributeName
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, genericAttributeExpected)},
 		},
 	}
-	runGenericAttributesTestForNodes(expectedNodes, tempDir, t, genericAttributeName, genericAttributeExpected)
+	runGenericAttributesTestForNodes(t, expectedNodes, tempDir, genericAttributeName, genericAttributeExpected)
 }
-func runGenericAttributesTestForNodes(expectedNodes []restic.Node, tempDir string, t *testing.T, genericAttr restic.GenericAttributeType, genericAttributeExpected []byte) {
+func runGenericAttributesTestForNodes(t *testing.T, expectedNodes []restic.Node, tempDir string, genericAttr restic.GenericAttributeType, genericAttributeExpected []byte) {
 
 	for _, testNode := range expectedNodes {
-		testPath, genericAttrThroughNodeFromFileInfo := prepareGenericAttributesTestForNodes(tempDir, testNode, t, genericAttr)
-		test.Equals(t, genericAttributeExpected, genericAttrThroughNodeFromFileInfo, "Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(genericAttr), testPath)
+		testPath, node := restoreAndGetNode(t, tempDir, testNode)
+		test.Equals(t, genericAttributeExpected, node.GetGenericAttribute(genericAttr), "Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(genericAttr), testPath)
 	}
 }
 
-func prepareGenericAttributesTestForNodes(tempDir string, testNode restic.Node, t *testing.T, genericAttr restic.GenericAttributeType) (string, []byte) {
-	testPath := prepareTestAndRestoreMetadata(tempDir, testNode, t)
-
-	fi, err := os.Lstat(testPath)
-	if err != nil {
-		t.Fatal(errors.Wrapf(err, "Could not Lstat for path: %s", testPath))
-	}
-
-	nodeFromFileInfo, err := restic.NodeFromFileInfo(testPath, fi)
-	if err != nil {
-		t.Fatal(errors.Wrapf(err, "Could not get NodeFromFileInfo for path: %s", testPath))
-	}
-	genericAttrThroughNodeFromFileInfo := nodeFromFileInfo.GetGenericAttribute(genericAttr)
-	return testPath, genericAttrThroughNodeFromFileInfo
-}
-
-func prepareTestAndRestoreMetadata(tempDir string, testNode restic.Node, t *testing.T) string {
+func restoreAndGetNode(t *testing.T, tempDir string, testNode restic.Node) (string, *restic.Node) {
 	testPath := filepath.Join(tempDir, "001", testNode.Name)
-	if err := os.MkdirAll(filepath.Dir(testPath), testNode.Mode); err != nil {
-		t.Fatalf("Failed to create parent directories: %v", err)
-	}
+	err := os.MkdirAll(filepath.Dir(testPath), testNode.Mode)
+	test.OK(t, errors.Wrapf(err, "Failed to create parent directories for: %s", testPath))
+
 	if testNode.Type == "file" {
 
 		testFile, err := os.Create(testPath)
-		if err != nil {
-			t.Fatalf("Failed to create test file: %v", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Failed to create test file: %s", testPath))
 		testFile.Close()
 	} else if testNode.Type == "dir" {
 
 		err := os.Mkdir(testPath, testNode.Mode)
-		if err != nil {
-			t.Fatalf("Failed to create test directory: %v", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Failed to create test directory: %s", testPath))
 	}
 
-	err := testNode.RestoreMetadata(testPath)
-	if err != nil {
-		t.Fatalf("Error restoring metadata: %v", err)
-	}
-	return testPath
-}
+	err = testNode.RestoreMetadata(testPath)
+	test.OK(t, errors.Wrapf(err, "Failed to restore metadata for: %s", testPath))
 
-func getCreationTime(t *testing.T, path string) []byte {
-	fi, err := os.Lstat(path)
-	if err != nil {
-		t.Fatal(errors.Wrapf(err, "Could not Lstat for path: %s", path))
-	}
+	fi, err := os.Lstat(testPath)
+	test.OK(t, errors.Wrapf(err, "Could not Lstat for path: %s", testPath))
 
-	attrib, success := fi.Sys().(*syscall.Win32FileAttributeData)
-	if success && attrib != nil {
-		var creationTime [8]byte
-		binary.LittleEndian.PutUint32(creationTime[0:4], attrib.CreationTime.LowDateTime)
-		binary.LittleEndian.PutUint32(creationTime[4:8], attrib.CreationTime.HighDateTime)
-		return creationTime[:]
-	} else {
-		t.Fatal("Could not get creation time for path: " + path)
-	}
-	return nil
+	nodeFromFileInfo, err := restic.NodeFromFileInfo(testPath, fi)
+	test.OK(t, errors.Wrapf(err, "Could not get NodeFromFileInfo for path: %s", testPath))
+
+	return testPath, nodeFromFileInfo
 }
 
 const TypeSomeNewAttribute restic.GenericAttributeType = "someNewAttribute"
 
 func TestNewGenericAttributeType(t *testing.T) {
+	t.Parallel()
 	genericAttributeName := TypeSomeNewAttribute
 	tempDir := t.TempDir()
 	expectedNodes := []restic.Node{
@@ -376,7 +333,7 @@ func TestNewGenericAttributeType(t *testing.T) {
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
 		},
 		{
 			Name:              "testdirectory",
@@ -385,12 +342,12 @@ func TestNewGenericAttributeType(t *testing.T) {
 			ModTime:           parseTime("2005-05-14 21:07:03.111"),
 			AccessTime:        parseTime("2005-05-14 21:07:04.222"),
 			ChangeTime:        parseTime("2005-05-14 21:07:05.333"),
-			GenericAttributes: []restic.GenericAttribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
+			GenericAttributes: []restic.Attribute{restic.NewGenericAttribute(genericAttributeName, []byte("any value"))},
 		},
 	}
 	for _, testNode := range expectedNodes {
-		testPath, genericAttrThroughNodeFromFileInfo := prepareGenericAttributesTestForNodes(tempDir, testNode, t, TypeSomeNewAttribute)
+		testPath, node := restoreAndGetNode(t, tempDir, testNode)
 		//Since this GenericAttribute is unknown to this version of the software, it will not get set on the file.
-		test.Equals(t, []byte(nil), genericAttrThroughNodeFromFileInfo, "Unknown Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(TypeSomeNewAttribute), testPath)
+		test.Equals(t, []byte(nil), node.GetGenericAttribute(TypeSomeNewAttribute), "Unknown Generic attribute: %s got from NodeFromFileInfo not equal for path: %s", string(TypeSomeNewAttribute), testPath)
 	}
 }

@@ -30,10 +30,10 @@ func (fw *filesWriter) OpenFile(createSize int64, path string, fileInfo *fileInf
 	var mainPath string
 	mainPath, file, err = fw.openFileImpl(createSize, path, fileInfo)
 	if err != nil && fs.IsAccessDenied(err) {
-		// Access is denied, remove readonly and try again.
-		// ClearReadonly removes the readonly flag from the main file
+		// Access is denied, remove readonly by resetting permissions and try again.
+		// ResetPermissions effectively removes the readonly flag from the main file
 		// as it will be set again while applying metadata in the next pass if required.
-		err = fs.ClearReadonly(mainPath)
+		err = fs.ResetPermissions(mainPath)
 		if err == nil {
 			_, file, err = fw.openFileImpl(createSize, path, fileInfo)
 			if err != nil {
@@ -234,12 +234,11 @@ func GetOrCreateMutex(path string) *sync.Mutex {
 			pathMutexMap.mutex[path] = mutex
 		}
 	}
-
 	return mutex
 }
 
 // getAdsAttributes gets all the ads related attributes.
-func getAdsAttributes(attrs []restic.GenericAttribute) (adsValues []string, hasAds, isAds bool) {
+func getAdsAttributes(attrs []restic.Attribute) (adsValues []string, hasAds, isAds bool) {
 	if len(attrs) > 0 {
 		adsBytes := restic.GetGenericAttribute(restic.TypeHasADS, attrs)
 		adsString := string(adsBytes)

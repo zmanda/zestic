@@ -23,23 +23,17 @@ func (fw *filesWriter) openFile(createSize int64, path string, _ *fileInfo) (fil
 	var f *os.File
 	var err error
 	if createSize >= 0 {
-		// First check if file already exists
-		f, err = openFileWithTruncWrite(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				f, err = openFileWithCreate(path)
-			} else if fs.IsAccessDenied(err) {
-				// If file is readonly, clear the readonly flag and try again
-				// as the metadata will be set again in the second pass and the
-				// readonly flag will be applied again if needed.
-				err = fs.ClearReadonly(path)
-				if err != nil {
-					return nil, err
-				}
-				f, err = openFileWithTruncWrite(path)
-			} else {
+		f, err = openFileWithCreate(path)
+		if fs.IsAccessDenied(err) {
+			// If file is readonly, clear the readonly flag by resetting the
+			// permissions of the file and try again
+			// as the metadata will be set again in the second pass and the
+			// readonly flag will be applied again if needed.
+			err = fs.ResetPermissions(path)
+			if err != nil {
 				return nil, err
 			}
+			f, err = openFileWithTruncWrite(path)
 		}
 	} else {
 		flags := os.O_WRONLY

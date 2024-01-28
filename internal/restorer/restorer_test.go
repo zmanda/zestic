@@ -27,20 +27,30 @@ type Snapshot struct {
 }
 
 type File struct {
-	Data    string
-	Links   uint64
-	Inode   uint64
-	Mode    os.FileMode
-	ModTime time.Time
+	Data       string
+	Links      uint64
+	Inode      uint64
+	Mode       os.FileMode
+	ModTime    time.Time
+	attributes *Attributes
 }
 
 type Dir struct {
-	Nodes   map[string]Node
-	Mode    os.FileMode
-	ModTime time.Time
+	Nodes      map[string]Node
+	Mode       os.FileMode
+	ModTime    time.Time
+	attributes *Attributes
 }
 
-func saveFile(t testing.TB, repo restic.Repository, node File) restic.ID {
+type Attributes struct {
+	ReadOnly  bool
+	Hidden    bool
+	System    bool
+	Archive   bool
+	Encrypted bool
+}
+
+func saveFile(t testing.TB, repo restic.BlobSaver, node File) restic.ID {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -52,7 +62,7 @@ func saveFile(t testing.TB, repo restic.Repository, node File) restic.ID {
 	return id
 }
 
-func saveDir(t testing.TB, repo restic.Repository, nodes map[string]Node, inode uint64) restic.ID {
+func saveDir(t testing.TB, repo restic.BlobSaver, nodes map[string]Node, inode uint64, getGenericAttributes func(attr *Attributes, isDir bool) (genericAttributes []restic.Attribute)) restic.ID {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -78,20 +88,21 @@ func saveDir(t testing.TB, repo restic.Repository, nodes map[string]Node, inode 
 				mode = 0644
 			}
 			err := tree.Insert(&restic.Node{
-				Type:    "file",
-				Mode:    mode,
-				ModTime: node.ModTime,
-				Name:    name,
-				UID:     uint32(os.Getuid()),
-				GID:     uint32(os.Getgid()),
-				Content: fc,
-				Size:    uint64(len(n.(File).Data)),
-				Inode:   fi,
-				Links:   lc,
+				Type:              "file",
+				Mode:              mode,
+				ModTime:           node.ModTime,
+				Name:              name,
+				UID:               uint32(os.Getuid()),
+				GID:               uint32(os.Getgid()),
+				Content:           fc,
+				Size:              uint64(len(n.(File).Data)),
+				Inode:             fi,
+				Links:             lc,
+				GenericAttributes: getGenericAttributes(node.attributes, false),
 			})
 			rtest.OK(t, err)
 		case Dir:
-			id := saveDir(t, repo, node.Nodes, inode)
+			id := saveDir(t, repo, node.Nodes, inode, getGenericAttributes)
 
 			mode := node.Mode
 			if mode == 0 {
@@ -99,13 +110,14 @@ func saveDir(t testing.TB, repo restic.Repository, nodes map[string]Node, inode 
 			}
 
 			err := tree.Insert(&restic.Node{
-				Type:    "dir",
-				Mode:    mode,
-				ModTime: node.ModTime,
-				Name:    name,
-				UID:     uint32(os.Getuid()),
-				GID:     uint32(os.Getgid()),
-				Subtree: &id,
+				Type:              "dir",
+				Mode:              mode,
+				ModTime:           node.ModTime,
+				Name:              name,
+				UID:               uint32(os.Getuid()),
+				GID:               uint32(os.Getgid()),
+				Subtree:           &id,
+				GenericAttributes: getGenericAttributes(node.attributes, false),
 			})
 			rtest.OK(t, err)
 		default:
@@ -121,13 +133,13 @@ func saveDir(t testing.TB, repo restic.Repository, nodes map[string]Node, inode 
 	return id
 }
 
-func saveSnapshot(t testing.TB, repo restic.Repository, snapshot Snapshot) (*restic.Snapshot, restic.ID) {
+func saveSnapshot(t testing.TB, repo restic.Repository, snapshot Snapshot, getGenericAttributes func(attr *Attributes, isDir bool) (genericAttributes []restic.Attribute)) (*restic.Snapshot, restic.ID) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	wg, wgCtx := errgroup.WithContext(ctx)
 	repo.StartPackUploader(wgCtx, wg)
-	treeID := saveDir(t, repo, snapshot.Nodes, 1000)
+	treeID := saveDir(t, repo, snapshot.Nodes, 1000, getGenericAttributes)
 	err := repo.Flush(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -145,6 +157,11 @@ func saveSnapshot(t testing.TB, repo restic.Repository, snapshot Snapshot) (*res
 	}
 
 	return sn, id
+}
+
+var noopGetGenericAttributes = func(attr *Attributes, isDir bool) (genericAttributes []restic.Attribute) {
+	// No-op
+	return nil
 }
 
 func TestRestorer(t *testing.T) {
@@ -322,7 +339,7 @@ func TestRestorer(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			repo := repository.TestRepository(t)
-			sn, id := saveSnapshot(t, repo, test.Snapshot)
+			sn, id := saveSnapshot(t, repo, test.Snapshot, noopGetGenericAttributes)
 			t.Logf("snapshot saved as %v", id.Str())
 
 			res := NewRestorer(repo, sn, false, nil)
@@ -439,7 +456,7 @@ func TestRestorerRelative(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			repo := repository.TestRepository(t)
 
-			sn, id := saveSnapshot(t, repo, test.Snapshot)
+			sn, id := saveSnapshot(t, repo, test.Snapshot, noopGetGenericAttributes)
 			t.Logf("snapshot saved as %v", id.Str())
 
 			res := NewRestorer(repo, sn, false, nil)
@@ -669,7 +686,7 @@ func TestRestorerTraverseTree(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			repo := repository.TestRepository(t)
-			sn, _ := saveSnapshot(t, repo, test.Snapshot)
+			sn, _ := saveSnapshot(t, repo, test.Snapshot, noopGetGenericAttributes)
 
 			res := NewRestorer(repo, sn, false, nil)
 
@@ -745,7 +762,7 @@ func TestRestorerConsistentTimestampsAndPermissions(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, noopGetGenericAttributes)
 
 	res := NewRestorer(repo, sn, false, nil)
 
@@ -800,7 +817,7 @@ func TestVerifyCancel(t *testing.T) {
 	}
 
 	repo := repository.TestRepository(t)
-	sn, _ := saveSnapshot(t, repo, snapshot)
+	sn, _ := saveSnapshot(t, repo, snapshot, noopGetGenericAttributes)
 
 	res := NewRestorer(repo, sn, false, nil)
 

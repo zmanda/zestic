@@ -28,7 +28,7 @@ type fileInfo struct {
 	lock       sync.Mutex
 	inProgress bool
 	sparse     bool
-	attrs      []restic.GenericAttribute
+	attrs      []restic.Attribute
 	size       int64
 	location   string      // file on local filesystem relative to restorer basedir
 	blobs      interface{} // blobs of the file
@@ -86,7 +86,7 @@ func newFileRestorer(dst string,
 	}
 }
 
-func (r *fileRestorer) addFile(location string, content restic.IDs, attrs []restic.GenericAttribute, size int64) {
+func (r *fileRestorer) addFile(location string, content restic.IDs, attrs []restic.Attribute, size int64) {
 	r.files = append(r.files, &fileInfo{location: location, attrs: attrs, blobs: content, size: size})
 }
 
