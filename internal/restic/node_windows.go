@@ -135,7 +135,7 @@ func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT
 		node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
 
 		//Add Creation Time
-		node.appendGenericAttribute(getCreationTime(fi, path))
+		node.appendGenericAttribute(GetCreationTime(fi, path))
 	}
 	return true, nil
 }
@@ -160,12 +160,12 @@ func UInt32ToBytes(value uint32) (bytes []byte) {
 	return bytes
 }
 
-// getCreationTime gets the value for the GenericAttribute TypeCreationTime in a windows specific time format.
+// GetCreationTime gets the value for the GenericAttribute TypeCreationTime in a windows specific time format.
 // The value is a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC)
 // split into two 32-bit parts: the low-order DWORD and the high-order DWORD for efficiency and interoperability.
 // The low-order DWORD represents the number of 100-nanosecond intervals elapsed since January 1, 1601, modulo
 // 2^32. The high-order DWORD represents the number of times the low-order DWORD has overflowed.
-func getCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Attribute) {
+func GetCreationTime(fi os.FileInfo, path string) (creationTimeAttribute Attribute) {
 	attrib, success := fi.Sys().(*syscall.Win32FileAttributeData)
 	if success && attrib != nil {
 		var creationTime [8]byte
