@@ -6,6 +6,6 @@ package restore
 import "github.com/restic/restic/internal/restic"
 
 // incrementFilesFinished increments the files finished count
-func (p *Progress) incrementFilesFinished(_ []restic.GenericAttribute) {
+func (p *Progress) incrementFilesFinished(_ []restic.Attribute) {
 	p.filesFinished++
 }
