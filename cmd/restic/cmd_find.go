@@ -261,7 +261,7 @@ func (f *Finder) findInSnapshot(ctx context.Context, sn *restic.Snapshot) error 
 	}
 
 	f.out.newsn = sn
-	return walker.Walk(ctx, f.repo, *sn.Tree, func(parentTreeID restic.ID, nodepath string, node *restic.Node, err error) error {
+	return walker.Walk(ctx, f.repo, *sn.Tree, walker.WalkVisitor{ProcessNode: func(parentTreeID restic.ID, nodepath string, node *restic.Node, err error) error {
 		if err != nil {
 			debug.Log("Error loading tree %v: %v", parentTreeID, err)
 
@@ -328,7 +328,7 @@ func (f *Finder) findInSnapshot(ctx context.Context, sn *restic.Snapshot) error 
 		debug.Log("    found match\n")
 		f.out.PrintPattern(nodepath, node)
 		return nil
-	})
+	}})
 }
 
 func (f *Finder) findIDs(ctx context.Context, sn *restic.Snapshot) error {
@@ -339,7 +339,7 @@ func (f *Finder) findIDs(ctx context.Context, sn *restic.Snapshot) error {
 	}
 
 	f.out.newsn = sn
-	return walker.Walk(ctx, f.repo, *sn.Tree, func(parentTreeID restic.ID, nodepath string, node *restic.Node, err error) error {
+	return walker.Walk(ctx, f.repo, *sn.Tree, walker.WalkVisitor{ProcessNode: func(parentTreeID restic.ID, nodepath string, node *restic.Node, err error) error {
 		if err != nil {
 			debug.Log("Error loading tree %v: %v", parentTreeID, err)
 
@@ -389,7 +389,7 @@ func (f *Finder) findIDs(ctx context.Context, sn *restic.Snapshot) error {
 		}
 
 		return nil
-	})
+	}})
 }
 
 var errAllPacksFound = errors.New("all packs found")
