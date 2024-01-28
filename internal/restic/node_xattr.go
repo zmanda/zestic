@@ -80,14 +80,14 @@ func (node *Node) fillExtendedAttributes(path string) error {
 		return err
 	}
 
-	node.ExtendedAttributes = make([]ExtendedAttribute, 0, len(xattrs))
+	node.ExtendedAttributes = make([]Attribute, 0, len(xattrs))
 	for _, attr := range xattrs {
 		attrVal, err := getxattr(path, attr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "can not obtain extended attribute %v for %v:\n", attr, path)
 			continue
 		}
-		attr := ExtendedAttribute{
+		attr := Attribute{
 			Name:  attr,
 			Value: attrVal,
 		}
