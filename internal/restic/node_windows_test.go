@@ -19,6 +19,7 @@ import (
 )
 
 func TestRestoreSecurityDescriptors(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	expectedNodes := []restic.Node{
 		{
@@ -67,7 +68,7 @@ func TestRestoreSecurityDescriptors(t *testing.T) {
 		},
 	}
 	for _, testNode := range expectedNodes {
-		testPath, node := restoreAndGetNode(t, tempDir, testNode, restic.TypeSecurityDescriptor)
+		testPath, node := restoreAndGetNode(t, tempDir, testNode)
 
 		sd, err := fs.GetFileSecurityDescriptor(testPath)
 
@@ -75,48 +76,34 @@ func TestRestoreSecurityDescriptors(t *testing.T) {
 
 		testSD := string(node.GetGenericAttribute(restic.TypeSecurityDescriptor))
 		sdBytesTest, err := base64.StdEncoding.DecodeString(testSD)
-		if err != nil {
-			t.Fatalf("Error decoding SD: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
 		sdInput, err := fs.SecurityDescriptorBytesToStruct(sdBytesTest)
 
-		if err != nil {
-			t.Fatalf("Error converting SD to struct: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error converting SD to struct for: %s", testPath))
 
 		sdBytesOutput, err := base64.StdEncoding.DecodeString(sd)
-		if err != nil {
-			t.Fatalf("Error decoding SD: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
+
 		sdOutput, err := fs.SecurityDescriptorBytesToStruct(sdBytesOutput)
-		if err != nil {
-			t.Fatalf("Error converting Output SD to struct: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error converting Output SD to struct for: %s", testPath))
 
 		test.Equals(t, sdInput, sdOutput, "SecurityDescriptors not equal for path: %s", testPath)
 
 		fi, err := os.Lstat(testPath)
-		if err != nil {
-			t.Fatal(err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error running Lstat for: %s", testPath))
 
 		nodeFromFileInfo, err := restic.NodeFromFileInfo(testPath, fi)
-		if err != nil {
-			t.Fatal(err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error getting node from fileInfo for: %s", testPath))
 
 		sdNodeFromFileInfoInput := sdOutput
 
 		sdBytesFromNode := nodeFromFileInfo.GetGenericAttribute(restic.TypeSecurityDescriptor)
 
 		sdByteNodeOutput, err := base64.StdEncoding.DecodeString(string(sdBytesFromNode))
-		if err != nil {
-			t.Fatalf("Error decoding SD: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error decoding SD for: %s", testPath))
+
 		sdNodeFromFileInfoOutput, err := fs.SecurityDescriptorBytesToStruct(sdByteNodeOutput)
-		if err != nil {
-			t.Fatalf("Error converting Output SD Through Node to struct: %s", err)
-		}
+		test.OK(t, errors.Wrapf(err, "Error converting SD Output Node to struct for: %s", testPath))
 
 		test.Equals(t, sdNodeFromFileInfoInput, sdNodeFromFileInfoOutput, "SecurityDescriptors got from NodeFromFileInfo not equal for path: %s", testPath)
 	}
