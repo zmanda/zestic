@@ -154,7 +154,7 @@ func (node *Node) fillExtendedAttributes(path string) (err error) {
 			err = errors.Errorf("can not obtain extended attribute for path %v, attr: %v, err: %v\n,", path, attr, err)
 			continue
 		}
-		extendedAttr := ExtendedAttribute{
+		extendedAttr := Attribute{
 			Name:  attr.Name,
 			Value: attr.Value,
 		}
