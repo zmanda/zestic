@@ -272,7 +272,7 @@ func TestInodeFromNode(t *testing.T) {
 }
 
 func TestLink(t *testing.T) {
-	node := &restic.Node{Name: "foo.txt", Type: "symlink", Links: 1, LinkTarget: "dst", ExtendedAttributes: []restic.ExtendedAttribute{
+	node := &restic.Node{Name: "foo.txt", Type: "symlink", Links: 1, LinkTarget: "dst", ExtendedAttributes: []restic.Attribute{
 		{Name: "foo", Value: []byte("bar")},
 	}}
 
