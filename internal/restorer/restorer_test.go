@@ -42,6 +42,14 @@ type Dir struct {
 	attributes *Attributes
 }
 
+type Attributes struct {
+	ReadOnly  bool
+	Hidden    bool
+	System    bool
+	Archive   bool
+	Encrypted bool
+}
+
 func saveFile(t testing.TB, repo restic.BlobSaver, node File) restic.ID {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

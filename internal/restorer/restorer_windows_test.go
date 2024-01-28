@@ -41,17 +41,11 @@ func getBlockCount(t *testing.T, filename string) int64 {
 	return int64(math.Ceil(float64(result) / 512))
 }
 
-type Attributes struct {
-	ReadOnly  bool
-	Hidden    bool
-	System    bool
-	Archive   bool
-	Encrypted bool
-}
 type DataStreamInfo struct {
 	name string
 	data string
 }
+
 type NodeInfo struct {
 	DataStreamInfo
 	parentDir   string
