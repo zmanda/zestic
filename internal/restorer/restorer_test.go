@@ -20,7 +20,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type Node interface{}
+type Node interface {
+	IsAds() bool
+	HasAds() bool
+	Attributes() *FileAttributes
+}
 
 type Snapshot struct {
 	Nodes map[string]Node
@@ -32,17 +36,46 @@ type File struct {
 	Inode      uint64
 	Mode       os.FileMode
 	ModTime    time.Time
-	attributes *Attributes
+	attributes *FileAttributes
+	isAds      bool
+	hasAds     bool
+}
+
+func (f File) IsAds() bool {
+	return f.isAds
+}
+
+func (f File) HasAds() bool {
+	return f.hasAds
+}
+
+func (f File) Attributes() *FileAttributes {
+	return f.attributes
 }
 
 type Dir struct {
 	Nodes      map[string]Node
 	Mode       os.FileMode
 	ModTime    time.Time
-	attributes *Attributes
+	attributes *FileAttributes
+	isAds      bool
+	hasAds     bool
 }
 
-type Attributes struct {
+func (_ Dir) IsAds() bool {
+	// Dir itself can not be an ADS
+	return false
+}
+
+func (d Dir) HasAds() bool {
+	return d.hasAds
+}
+
+func (d Dir) Attributes() *FileAttributes {
+	return d.attributes
+}
+
+type FileAttributes struct {
 	ReadOnly  bool
 	Hidden    bool
 	System    bool
@@ -62,7 +95,9 @@ func saveFile(t testing.TB, repo restic.BlobSaver, node File) restic.ID {
 	return id
 }
 
-func saveDir(t testing.TB, repo restic.BlobSaver, nodes map[string]Node, inode uint64, getGenericAttributes func(attr *Attributes, isDir bool) (genericAttributes []restic.Attribute)) restic.ID {
+func saveDir(t testing.TB, repo restic.BlobSaver, nodes map[string]Node, inode uint64,
+	getFileAttributes func(attr *FileAttributes, isDir bool) (fileAttributes []restic.Attribute),
+	getAdsAttribute func(path string, hasAds, isAds bool) (adsAttibute restic.Attribute)) restic.ID {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -87,6 +122,7 @@ func saveDir(t testing.TB, repo restic.BlobSaver, nodes map[string]Node, inode u
 			if mode == 0 {
 				mode = 0644
 			}
+
 			err := tree.Insert(&restic.Node{
 				Type:              "file",
 				Mode:              mode,
@@ -98,11 +134,11 @@ func saveDir(t testing.TB, repo restic.BlobSaver, nodes map[string]Node, inode u
 				Size:              uint64(len(n.(File).Data)),
 				Inode:             fi,
 				Links:             lc,
-				GenericAttributes: getGenericAttributes(node.attributes, false),
+				GenericAttributes: getGenericAttributes(name, node, getFileAttributes, getAdsAttribute),
 			})
 			rtest.OK(t, err)
 		case Dir:
-			id := saveDir(t, repo, node.Nodes, inode, getGenericAttributes)
+			id := saveDir(t, repo, node.Nodes, inode, getFileAttributes, getAdsAttribute)
 
 			mode := node.Mode
 			if mode == 0 {
@@ -117,7 +153,7 @@ func saveDir(t testing.TB, repo restic.BlobSaver, nodes map[string]Node, inode u
 				UID:               uint32(os.Getuid()),
 				GID:               uint32(os.Getgid()),
 				Subtree:           &id,
-				GenericAttributes: getGenericAttributes(node.attributes, false),
+				GenericAttributes: getGenericAttributes(name, node, getFileAttributes, getAdsAttribute),
 			})
 			rtest.OK(t, err)
 		default:
@@ -133,13 +169,26 @@ func saveDir(t testing.TB, repo restic.BlobSaver, nodes map[string]Node, inode u
 	return id
 }
 
-func saveSnapshot(t testing.TB, repo restic.Repository, snapshot Snapshot, getGenericAttributes func(attr *Attributes, isDir bool) (genericAttributes []restic.Attribute)) (*restic.Snapshot, restic.ID) {
+func getGenericAttributes(name string, node Node, getFileAttributes func(attr *FileAttributes, isDir bool) []restic.Attribute,
+	getAdsAttributes func(path string, hasAds bool, isAds bool) restic.Attribute) []restic.Attribute {
+	genericAttributes := getFileAttributes(node.Attributes(), false)
+	if node.HasAds() || node.IsAds() {
+		if genericAttributes == nil {
+			genericAttributes = []restic.Attribute{}
+		}
+		genericAttributes = append(genericAttributes, getAdsAttributes(name, node.HasAds(), node.IsAds()))
+	}
+	return genericAttributes
+}
+
+func saveSnapshot(t testing.TB, repo restic.Repository, snapshot Snapshot, getFileAttributes func(attr *FileAttributes, isDir bool) (genericAttributes []restic.Attribute),
+	getAdsAttributes func(path string, hasAds bool, isAds bool) restic.Attribute) (*restic.Snapshot, restic.ID) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	wg, wgCtx := errgroup.WithContext(ctx)
 	repo.StartPackUploader(wgCtx, wg)
-	treeID := saveDir(t, repo, snapshot.Nodes, 1000, getGenericAttributes)
+	treeID := saveDir(t, repo, snapshot.Nodes, 1000, getFileAttributes, getAdsAttributes)
 	err := repo.Flush(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -159,9 +208,14 @@ func saveSnapshot(t testing.TB, repo restic.Repository, snapshot Snapshot, getGe
 	return sn, id
 }
 
-var noopGetGenericAttributes = func(attr *Attributes, isDir bool) (genericAttributes []restic.Attribute) {
+var noopGetFileAttributes = func(attr *FileAttributes, isDir bool) (fileAttributes []restic.Attribute) {
 	// No-op
 	return nil
+}
+
+var noopGetAdsAttributes = func(path string, hasAds bool, isAds bool) (adsAttribute restic.Attribute) {
+	// No-op
+	return restic.Attribute{}
 }
 
 func TestRestorer(t *testing.T) {
@@ -339,7 +393,7 @@ func TestRestorer(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			repo := repository.TestRepository(t)
-			sn, id := saveSnapshot(t, repo, test.Snapshot, noopGetGenericAttributes)
+			sn, id := saveSnapshot(t, repo, test.Snapshot, noopGetFileAttributes, noopGetAdsAttributes)
 			t.Logf("snapshot saved as %v", id.Str())
 
 			res := NewRestorer(repo, sn, false, nil)
@@ -456,7 +510,7 @@ func TestRestorerRelative(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			repo := repository.TestRepository(t)
 
-			sn, id := saveSnapshot(t, repo, test.Snapshot, noopGetGenericAttributes)
+			sn, id := saveSnapshot(t, repo, test.Snapshot, noopGetFileAttributes, noopGetAdsAttributes)
 			t.Logf("snapshot saved as %v", id.Str())
 
 			res := NewRestorer(repo, sn, false, nil)
@@ -686,7 +740,7 @@ func TestRestorerTraverseTree(t *testing.T) {
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			repo := repository.TestRepository(t)
-			sn, _ := saveSnapshot(t, repo, test.Snapshot, noopGetGenericAttributes)
+			sn, _ := saveSnapshot(t, repo, test.Snapshot, noopGetFileAttributes, noopGetAdsAttributes)
 
 			res := NewRestorer(repo, sn, false, nil)
 
@@ -762,7 +816,7 @@ func TestRestorerConsistentTimestampsAndPermissions(t *testing.T) {
 				},
 			},
 		},
-	}, noopGetGenericAttributes)
+	}, noopGetFileAttributes, noopGetAdsAttributes)
 
 	res := NewRestorer(repo, sn, false, nil)
 
@@ -817,7 +871,7 @@ func TestVerifyCancel(t *testing.T) {
 	}
 
 	repo := repository.TestRepository(t)
-	sn, _ := saveSnapshot(t, repo, snapshot, noopGetGenericAttributes)
+	sn, _ := saveSnapshot(t, repo, snapshot, noopGetFileAttributes, noopGetAdsAttributes)
 
 	res := NewRestorer(repo, sn, false, nil)
 
