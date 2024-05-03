@@ -57,22 +57,6 @@ func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespe
 	return syscall.SetFileTime(h, nil, &a, &w)
 }
 
-// Getxattr retrieves extended attribute data associated with path.
-func Getxattr(path, name string) ([]byte, error) {
-	return nil, nil
-}
-
-// Listxattr retrieves a list of names of extended attributes associated with the
-// given path in the file system.
-func Listxattr(path string) ([]string, error) {
-	return nil, nil
-}
-
-// Setxattr associates name and data together as an attribute of path.
-func Setxattr(path, name string, data []byte) error {
-	return nil
-}
-
 type statT syscall.Win32FileAttributeData
 
 func toStatT(i interface{}) (*statT, bool) {
@@ -104,7 +88,80 @@ func (s statT) mtim() syscall.Timespec {
 
 func (s statT) ctim() syscall.Timespec {
 	// Windows does not have the concept of a "change time" in the sense Unix uses it, so we're using the LastWriteTime here.
-	return syscall.NsecToTimespec(s.LastWriteTime.Nanoseconds())
+	return s.mtim()
+}
+
+// restore extended attributes for windows
+func (node Node) restoreExtendedAttributes(path string) (err error) {
+	eas := []fs.ExtendedAttribute{}
+	for _, attr := range node.ExtendedAttributes {
+		extr := new(fs.ExtendedAttribute)
+		extr.Name = attr.Name
+		extr.Value = attr.Value
+		eas = append(eas, *extr)
+	}
+	if len(eas) > 0 {
+		if errExt := restoreExtendedAttributes(node.Type, path, eas); errExt != nil {
+			return errExt
+		}
+	}
+	return nil
+}
+
+// fill extended attributes in the node. This also includes the Generic attributes for windows.
+func (node *Node) fillExtendedAttributes(path string) (err error) {
+	var fileHandle windows.Handle
+
+	//Get file handle for file or dir
+	if node.Type == "file" {
+		if strings.HasSuffix(filepath.Clean(path), `\`) {
+			return nil
+		}
+		utf16Path := windows.StringToUTF16Ptr(path)
+		fileAccessRightReadWriteEA := (0x8 | 0x10)
+		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	} else if node.Type == "dir" {
+		utf16Path := windows.StringToUTF16Ptr(path)
+		fileAccessRightReadWriteEA := (0x8 | 0x10)
+		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	} else {
+		return nil
+	}
+	if err != nil {
+		err = errors.Errorf("open file failed for path: %s, with: %v", path, err)
+		return err
+	}
+	defer func() {
+		err := windows.CloseHandle(fileHandle)
+		if err != nil {
+			debug.Log("Error closing file handle for %s: %v\n", path, err)
+		}
+	}()
+
+	//Get the windows Extended Attributes using the file handle
+	extAtts, err := fs.GetFileEA(fileHandle)
+	debug.Log("fillExtendedAttributes(%v) %v", path, extAtts)
+	if err != nil {
+		debug.Log("open file failed for path: %s : %v", path, err)
+		return err
+	} else if len(extAtts) == 0 {
+		return nil
+	}
+
+	//Fill the ExtendedAttributes in the node using the name/value pairs in the windows EA
+	for _, attr := range extAtts {
+		if err != nil {
+			err = errors.Errorf("can not obtain extended attribute for path %v, attr: %v, err: %v\n,", path, attr, err)
+			continue
+		}
+		extendedAttr := Attribute{
+			Name:  attr.Name,
+			Value: attr.Value,
+		}
+
+		node.ExtendedAttributes = append(node.ExtendedAttributes, extendedAttr)
+	}
+	return nil
 }
 
 // restoreGenericAttributes restores generic attributes for Windows
@@ -200,6 +257,36 @@ func getSecurityDescriptor(path string) (sdAttribute Attribute, err error) {
 		sdAttribute = NewGenericAttribute(TypeSecurityDescriptor, []byte(sd))
 	}
 	return sdAttribute, nil
+}
+
+// restoreExtendedAttributes handles restore of the Windows Extended Attributes to the specified path.
+// The Windows API requires setting of all the Extended Attributes in one call.
+func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute) (err error) {
+	var fileHandle windows.Handle
+	switch nodeType {
+	case "file":
+		utf16Path := windows.StringToUTF16Ptr(path)
+		fileAccessRightReadWriteEA := (0x8 | 0x10)
+		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	case "dir":
+		utf16Path := windows.StringToUTF16Ptr(path)
+		fileAccessRightReadWriteEA := (0x8 | 0x10)
+		fileHandle, err = windows.CreateFile(utf16Path, uint32(fileAccessRightReadWriteEA), 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+	default:
+		return nil
+	}
+	defer func() {
+		err := windows.CloseHandle(fileHandle)
+		if err != nil {
+			debug.Log("Error closing file handle for %s: %v\n", path, err)
+		}
+	}()
+	if err != nil {
+		err = errors.Errorf("open file failed for path %v, with: %v:\n", path, err)
+	} else if err = fs.SetFileEA(fileHandle, eas); err != nil {
+		err = errors.Errorf("set EA failed for path %v, with: %v:\n", path, err)
+	}
+	return err
 }
 
 // restoreGenericAttribute restores the generic attributes for Windows like File Attributes,

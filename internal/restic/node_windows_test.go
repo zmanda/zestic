@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -17,6 +18,86 @@ import (
 	"github.com/restic/restic/internal/test"
 	"golang.org/x/sys/windows"
 )
+
+func TestRestoreExtendedAttributes(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	expectedNodes := []restic.Node{
+		{
+			Name:       "testfile",
+			Type:       "file",
+			Mode:       0644,
+			ModTime:    parseTime("2005-05-14 21:07:03.111"),
+			AccessTime: parseTime("2005-05-14 21:07:04.222"),
+			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
+			ExtendedAttributes: []restic.Attribute{
+				{"user.foo", []byte("bar")},
+			},
+		},
+		{
+			Name:       "testdirectory",
+			Type:       "dir",
+			Mode:       0755,
+			ModTime:    parseTime("2005-05-14 21:07:03.111"),
+			AccessTime: parseTime("2005-05-14 21:07:04.222"),
+			ChangeTime: parseTime("2005-05-14 21:07:05.333"),
+			ExtendedAttributes: []restic.Attribute{
+				{"user.foo", []byte("bar")},
+			},
+		},
+	}
+	for _, testNode := range expectedNodes {
+		testPath := filepath.Join(tempDir, "001", testNode.Name)
+		err := os.MkdirAll(filepath.Dir(testPath), testNode.Mode)
+		test.OK(t, errors.Wrapf(err, "Failed to create parent directories for: %s", testPath))
+
+		if testNode.Type == "file" {
+
+			testFile, err := os.Create(testPath)
+			test.OK(t, errors.Wrapf(err, "Failed to create test file: %s", testPath))
+			testFile.Close()
+		} else if testNode.Type == "dir" {
+
+			err := os.Mkdir(testPath, testNode.Mode)
+			test.OK(t, errors.Wrapf(err, "Failed to create test directory for: %s", testPath))
+		}
+
+		err = testNode.RestoreMetadata(testPath)
+		test.OK(t, errors.Wrapf(err, "Error restoring metadata for: %s", testPath))
+
+		var handle windows.Handle
+		utf16Path := windows.StringToUTF16Ptr(testPath)
+		if testNode.Type == "file" {
+			handle, err = windows.CreateFile(utf16Path, windows.FILE_READ_EA, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+		} else if testNode.Type == "dir" {
+			handle, err = windows.CreateFile(utf16Path, windows.FILE_READ_EA, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_FLAG_BACKUP_SEMANTICS, 0)
+		}
+		test.OK(t, errors.Wrapf(err, "Error opening file/directory for: %s", testPath))
+		defer func() {
+			err := windows.Close(handle)
+			test.OK(t, errors.Wrapf(err, "Error closing file for: %s", testPath))
+		}()
+
+		if len(testNode.ExtendedAttributes) > 0 {
+			extAttr, err := fs.GetFileEA(handle)
+			test.OK(t, errors.Wrapf(err, "Error getting extended attributes for: %s", testPath))
+			test.Equals(t, len(testNode.ExtendedAttributes), len(extAttr))
+
+			for _, expectedExtAttr := range testNode.ExtendedAttributes {
+				var foundExtAttr *fs.ExtendedAttribute
+				for _, ea := range extAttr {
+					if strings.EqualFold(ea.Name, expectedExtAttr.Name) {
+						foundExtAttr = &ea
+						break
+
+					}
+				}
+				test.Assert(t, foundExtAttr != nil, "Expected extended attribute not found")
+				test.Equals(t, expectedExtAttr.Value, foundExtAttr.Value)
+			}
+		}
+	}
+}
 
 func TestRestoreSecurityDescriptors(t *testing.T) {
 	t.Parallel()
