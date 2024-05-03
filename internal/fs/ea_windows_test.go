@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func Test_SetGetFileEA(t *testing.T) {
+func TestSetGetFileEA(t *testing.T) {
 	tempDir := t.TempDir()
 	testfilePath := filepath.Join(tempDir, "testfile.txt")
 	// create temp file
@@ -76,7 +76,7 @@ func Test_SetGetFileEA(t *testing.T) {
 	}
 }
 
-func Test_SetGetFolderEA(t *testing.T) {
+func TestSetGetFolderEA(t *testing.T) {
 	tempDir := t.TempDir()
 	testfolderPath := filepath.Join(tempDir, "testfolder")
 	// create temp folder
@@ -177,7 +177,7 @@ var (
 	testEasTruncated = testEasEncoded[0:20]
 )
 
-func Test_RoundTripEas(t *testing.T) {
+func TestRoundTripEas(t *testing.T) {
 	b, err := fs.EncodeExtendedAttributes(testEas)
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func Test_RoundTripEas(t *testing.T) {
 	}
 }
 
-func Test_EasDontNeedPaddingAtEnd(t *testing.T) {
+func TestEasDontNeedPaddingAtEnd(t *testing.T) {
 	eas, err := fs.DecodeExtendedAttributes(testEasNotPadded)
 	if err != nil {
 		t.Fatal(err)
@@ -204,14 +204,14 @@ func Test_EasDontNeedPaddingAtEnd(t *testing.T) {
 	}
 }
 
-func Test_TruncatedEasFailCorrectly(t *testing.T) {
+func TestTruncatedEasFailCorrectly(t *testing.T) {
 	_, err := fs.DecodeExtendedAttributes(testEasTruncated)
 	if err == nil {
 		t.Fatal("expected error")
 	}
 }
 
-func Test_NilEasEncodeAndDecodeAsNil(t *testing.T) {
+func TestNilEasEncodeAndDecodeAsNil(t *testing.T) {
 	b, err := fs.EncodeExtendedAttributes(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -228,8 +228,8 @@ func Test_NilEasEncodeAndDecodeAsNil(t *testing.T) {
 	}
 }
 
-// Test_SetFileEa makes sure that the test buffer is actually parsable by NtSetEaFile.
-func Test_SetFileEa(t *testing.T) {
+// TestSetFileEa makes sure that the test buffer is actually parsable by NtSetEaFile.
+func TestSetFileEa(t *testing.T) {
 	f, err := os.CreateTemp("", "testea")
 	if err != nil {
 		t.Fatal(err)
