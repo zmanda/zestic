@@ -38,7 +38,7 @@ type ScanStats struct {
 	Bytes               uint64
 }
 
-func (s *Scanner) scanTree(ctx context.Context, stats ScanStats, tree Tree) (ScanStats, error) {
+func (s *Scanner) scanTree(ctx context.Context, stats ScanStats, tree Tree, opts SnapshotOptions) (ScanStats, error) {
 	// traverse the path in the file system for all leaf nodes
 	if tree.Leaf() {
 		abstarget, err := s.FS.Abs(tree.Path)
@@ -46,7 +46,7 @@ func (s *Scanner) scanTree(ctx context.Context, stats ScanStats, tree Tree) (Sca
 			return ScanStats{}, err
 		}
 
-		stats, err = s.scan(ctx, stats, abstarget)
+		stats, err = s.scan(ctx, stats, abstarget, opts)
 		if err != nil {
 			return ScanStats{}, err
 		}
@@ -57,7 +57,7 @@ func (s *Scanner) scanTree(ctx context.Context, stats ScanStats, tree Tree) (Sca
 	// otherwise recurse into the nodes in a deterministic order
 	for _, name := range tree.NodeNames() {
 		var err error
-		stats, err = s.scanTree(ctx, stats, tree.Nodes[name])
+		stats, err = s.scanTree(ctx, stats, tree.Nodes[name], opts)
 		if err != nil {
 			return ScanStats{}, err
 		}
@@ -72,7 +72,7 @@ func (s *Scanner) scanTree(ctx context.Context, stats ScanStats, tree Tree) (Sca
 
 // Scan traverses the targets. The function Result is called for each new item
 // found, the complete result is also returned by Scan.
-func (s *Scanner) Scan(ctx context.Context, targets []string) error {
+func (s *Scanner) Scan(ctx context.Context, targets []string, opts SnapshotOptions) error {
 	debug.Log("start scan for %v", targets)
 
 	cleanTargets, err := resolveRelativeTargets(s.FS, targets)
@@ -88,7 +88,7 @@ func (s *Scanner) Scan(ctx context.Context, targets []string) error {
 		return err
 	}
 
-	stats, err := s.scanTree(ctx, ScanStats{}, *tree)
+	stats, err := s.scanTree(ctx, ScanStats{}, *tree, opts)
 	if err != nil {
 		return err
 	}
@@ -98,13 +98,13 @@ func (s *Scanner) Scan(ctx context.Context, targets []string) error {
 	return nil
 }
 
-func (s *Scanner) scan(ctx context.Context, stats ScanStats, target string) (ScanStats, error) {
+func (s *Scanner) scan(ctx context.Context, stats ScanStats, target string, opts SnapshotOptions) (ScanStats, error) {
 	if ctx.Err() != nil {
 		return stats, nil
 	}
 
 	// exclude files by path before running stat to reduce number of lstat calls
-	if !s.SelectByName(target) {
+	if !s.SelectByName(target) || fs.IsPathRemoved(opts.Removes, target) {
 		return stats, nil
 	}
 
@@ -131,9 +131,13 @@ func (s *Scanner) scan(ctx context.Context, stats ScanStats, target string) (Sca
 		sort.Strings(names)
 
 		for _, name := range names {
-			stats, err = s.scan(ctx, stats, filepath.Join(target, name))
-			if err != nil {
-				return stats, err
+			var fullPath = filepath.Join(target, name)
+
+			if fs.IsPathIncluded(opts.Includes, fullPath) {
+				stats, err = s.scan(ctx, stats, fullPath, opts)
+				if err != nil {
+					return stats, err
+				}
 			}
 		}
 		stats.Dirs++
