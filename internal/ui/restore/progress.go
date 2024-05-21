@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/restic/restic/internal/restic"
 	"github.com/restic/restic/internal/ui/progress"
 )
 
@@ -61,13 +62,20 @@ func (p *Progress) update(runtime time.Duration, final bool) {
 func (p *Progress) AddFile(size uint64) {
 	p.m.Lock()
 	defer p.m.Unlock()
-
 	p.filesTotal++
+
+	p.allBytesTotal += size
+}
+
+// AddSize starts tracking a new file with the given size
+func (p *Progress) AddSize(size uint64) {
+	p.m.Lock()
+	defer p.m.Unlock()
 	p.allBytesTotal += size
 }
 
 // AddProgress accumulates the number of bytes written for a file
-func (p *Progress) AddProgress(name string, bytesWrittenPortion uint64, bytesTotal uint64) {
+func (p *Progress) AddProgress(attrs []restic.Attribute, name string, bytesWrittenPortion uint64, bytesTotal uint64) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
@@ -81,7 +89,7 @@ func (p *Progress) AddProgress(name string, bytesWrittenPortion uint64, bytesTot
 	p.allBytesWritten += bytesWrittenPortion
 	if entry.bytesWritten == entry.bytesTotal {
 		delete(p.progressInfoMap, name)
-		p.filesFinished++
+		p.incrementFilesFinished(attrs)
 	}
 }
 

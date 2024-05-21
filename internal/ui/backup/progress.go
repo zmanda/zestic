@@ -180,19 +180,19 @@ func (p *Progress) CompleteItem(item string, previous, current *restic.Node, s a
 		case previous == nil:
 			p.printer.CompleteItem("file new", item, s, d)
 			p.mu.Lock()
-			p.summary.Files.New++
+			p.incrementNewFiles(current)
 			p.mu.Unlock()
 
 		case previous.Equals(*current):
 			p.printer.CompleteItem("file unchanged", item, s, d)
 			p.mu.Lock()
-			p.summary.Files.Unchanged++
+			p.incrementUnchangedFiles(current)
 			p.mu.Unlock()
 
 		default:
 			p.printer.CompleteItem("file modified", item, s, d)
 			p.mu.Lock()
-			p.summary.Files.Changed++
+			p.incrementChangedFiles(current)
 			p.mu.Unlock()
 		}
 	}

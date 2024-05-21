@@ -15,6 +15,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const AdsSeparator = "|"
+
 var (
 	modAdvapi32     = syscall.NewLazyDLL("advapi32.dll")
 	procEncryptFile = modAdvapi32.NewProc("EncryptFileW")
@@ -59,6 +61,8 @@ func (node Node) restoreSymlinkTimestamps(path string, utimes [2]syscall.Timespe
 
 type statT syscall.Win32FileAttributeData
 
+// toStatT converts the OS dependent stat like *syscall.Win32FileAttributeData in windows to a
+// *restic.statT of type syscall.Win32FileAttributeData for windows.
 func toStatT(i interface{}) (*statT, bool) {
 	s, ok := i.(*syscall.Win32FileAttributeData)
 	if ok && s != nil {
@@ -91,6 +95,68 @@ func (s statT) ctim() syscall.Timespec {
 	return s.mtim()
 }
 
+// RestoreMetadata restores node metadata
+func (node Node) RestoreMetadata(path string) (err error) {
+	if node.IsMainFile() {
+		node.removeExtraStreams(path)
+		err = node.restoreMetadata(path)
+		if err != nil {
+			debug.Log("restoreMetadata(%s) error %v", path, err)
+		}
+	}
+	return err
+}
+
+// IsMainFile indicates if this is the main file and not a secondary file like an ads stream.
+// This is used for functionalities we want to skip for secondary (ads) files.
+// Eg. For Windows we do not want to count the secondary files
+func (node Node) IsMainFile() bool {
+	return node.GetGenericAttribute(TypeIsADS) == nil
+}
+
+// removeExtraStreams removes any extra streams on the file which are not present in the
+// backed up state in the generic attribute TypeHasAds.
+func (node Node) removeExtraStreams(path string) {
+	success, existingStreams, _ := fs.GetADStreamNames(path)
+	if success {
+		var adsValues []string
+
+		hasAdsBytes := node.GetGenericAttribute(TypeHasADS)
+		if hasAdsBytes != nil {
+			adsString := string(hasAdsBytes)
+			adsValues = strings.Split(adsString, AdsSeparator)
+		}
+
+		extraStreams := filterItems(adsValues, existingStreams)
+		for _, extraStream := range extraStreams {
+			streamToRemove := path + extraStream
+			err := os.Remove(streamToRemove)
+			if err != nil {
+				debug.Log("Error removing stream: %s : %s", streamToRemove, err)
+			}
+		}
+	}
+}
+
+// filterItems filters out which items are in evalArray which are not in referenceArray.
+func filterItems(referenceArray, evalArray []string) (result []string) {
+	// Create a map to store elements of referenceArray for fast lookup
+	referenceArrayMap := make(map[string]bool)
+	for _, item := range referenceArray {
+		referenceArrayMap[item] = true
+	}
+
+	// Iterate through elements of evalArray
+	for _, item := range evalArray {
+		// Check if the item is not in referenceArray
+		if !referenceArrayMap[item] {
+			// Append to the result array
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
 // restore extended attributes for windows
 func (node Node) restoreExtendedAttributes(path string) (err error) {
 	eas := []fs.ExtendedAttribute{}
@@ -112,7 +178,7 @@ func (node Node) restoreExtendedAttributes(path string) (err error) {
 func (node *Node) fillExtendedAttributes(path string) (err error) {
 	var fileHandle windows.Handle
 
-	//Get file handle for file or dir
+	// Get file handle for file or dir
 	if node.Type == "file" {
 		if strings.HasSuffix(filepath.Clean(path), `\`) {
 			return nil
@@ -178,31 +244,45 @@ func (node Node) restoreGenericAttributes(path string) (err error) {
 // fillGenericAttributes fills in the generic attributes for windows like File Attributes,
 // Created time, Security Descriptor etc.
 func (node *Node) fillGenericAttributes(path string, fi os.FileInfo, stat *statT) (allowExtended bool, err error) {
-	if strings.Contains(filepath.Base(path), ":") {
-		//Do not process for Alternate Data Streams in Windows
-		// Also do not allow processing of extended attributes for ADS.
-		return false, nil
-	}
-	if !strings.HasSuffix(filepath.Clean(path), `\`) {
-		// Do not process file attributes and created time for windows directories like
-		// C:, D:
-		// Filepath.Clean(path) ends with '\' for Windows root drives only.
-
+	// Add Is Ads
+	isAds, isAdsAttribute := getIsAds(path)
+	if isAds {
+		node.appendGenericAttribute(isAdsAttribute)
 		// Add File Attributes
+		// Do not set FileAttributes for root drives.
+		// Ads will not appear on root drives.
 		node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
-
-		//Add Creation Time
-		node.appendGenericAttribute(GetCreationTime(fi, path))
-	}
-
-	if node.Type == "file" || node.Type == "dir" {
-		sd, err := getSecurityDescriptor(path)
-		if err == nil {
-			//Add Security Descriptor
-			node.appendGenericAttribute(sd)
+		// Do not process remaining generic attributes for Alternate Data Streams in Windows
+		// Also do not allow to process extended attributes for ADS.
+		return false, err
+	} else {
+		//Add Has Ads
+		hasAds, hasAdsAttribute := getHasAds(path)
+		if hasAds {
+			node.appendGenericAttribute(hasAdsAttribute)
 		}
+
+		if !strings.HasSuffix(filepath.Clean(path), `\`) {
+			// Do not process file attributes and created time for windows directories like
+			// C:, D:
+			// Filepath.Clean(path) ends with '\' for Windows root drives only.
+
+			// Add File Attributes
+			node.appendGenericAttribute(getFileAttributes(stat.FileAttributes))
+
+			// Add Creation Time
+			node.appendGenericAttribute(GetCreationTime(fi, path))
+		}
+
+		if node.Type == "file" || node.Type == "dir" {
+			sd, err := getSecurityDescriptor(path)
+			if err == nil {
+				// Add Security Descriptor
+				node.appendGenericAttribute(sd)
+			}
+		}
+		return true, err
 	}
-	return true, err
 }
 
 // appendGenericAttribute appends a GenericAttribute to the node
@@ -259,6 +339,27 @@ func getSecurityDescriptor(path string) (sdAttribute Attribute, err error) {
 	return sdAttribute, nil
 }
 
+func getHasAds(path string) (hasAds bool, hasAdsAttribute Attribute) {
+	s, names, err := fs.GetADStreamNames(path)
+	if s {
+		if len(names) > 0 {
+			hasAds = true
+			hasAdsAttribute = NewGenericAttribute(TypeHasADS, []byte(strings.Join(names, AdsSeparator)))
+		}
+	} else if err != nil {
+		debug.Log("Could not fetch ads information for %v %v.", path, err)
+	}
+	return hasAds, hasAdsAttribute
+}
+
+func getIsAds(path string) (IsAds bool, isAdsAttribute Attribute) {
+	isAds := fs.IsAds(path)
+	if isAds {
+		isAdsAttribute = NewGenericAttribute(TypeIsADS, []byte(fs.TrimAds(path)))
+	}
+	return isAds, isAdsAttribute
+}
+
 // restoreExtendedAttributes handles restore of the Windows Extended Attributes to the specified path.
 // The Windows API requires setting of all the Extended Attributes in one call.
 func restoreExtendedAttributes(nodeType, path string, eas []fs.ExtendedAttribute) (err error) {
@@ -299,6 +400,12 @@ func restoreGenericAttribute(attr Attribute, path string) error {
 		return handleCreationTime(path, attr.Value)
 	case string(TypeSecurityDescriptor):
 		return handleSecurityDescriptor(path, attr.Value)
+	case string(TypeHasADS):
+		//No-op. Just confirming that we know this attribute.
+		return nil
+	case string(TypeIsADS):
+		//No-op. Just confirming that we know this attribute.
+		return nil
 	}
 	handleUnknownGenericAttributeFound(attr.Name)
 	return nil

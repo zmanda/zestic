@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/restic/restic/internal/restic"
 	"github.com/restic/restic/internal/test"
 )
 
@@ -65,9 +66,10 @@ func TestFirstProgressOnAFile(t *testing.T) {
 	expectedBytesWritten := uint64(5)
 	expectedBytesTotal := uint64(100)
 
+	node := restic.Node{}
 	result := testProgress(func(progress *Progress) bool {
 		progress.AddFile(expectedBytesTotal)
-		progress.AddProgress("test", expectedBytesWritten, expectedBytesTotal)
+		progress.AddProgress(node.GenericAttributes, "test", expectedBytesWritten, expectedBytesTotal)
 		return false
 	})
 	test.Equals(t, printerTrace{
@@ -78,11 +80,12 @@ func TestFirstProgressOnAFile(t *testing.T) {
 func TestLastProgressOnAFile(t *testing.T) {
 	fileSize := uint64(100)
 
+	node := restic.Node{}
 	result := testProgress(func(progress *Progress) bool {
 		progress.AddFile(fileSize)
-		progress.AddProgress("test", 30, fileSize)
-		progress.AddProgress("test", 35, fileSize)
-		progress.AddProgress("test", 35, fileSize)
+		progress.AddProgress(node.GenericAttributes, "test", 30, fileSize)
+		progress.AddProgress(node.GenericAttributes, "test", 35, fileSize)
+		progress.AddProgress(node.GenericAttributes, "test", 35, fileSize)
 		return false
 	})
 	test.Equals(t, printerTrace{
@@ -93,12 +96,13 @@ func TestLastProgressOnAFile(t *testing.T) {
 func TestLastProgressOnLastFile(t *testing.T) {
 	fileSize := uint64(100)
 
+	node := restic.Node{}
 	result := testProgress(func(progress *Progress) bool {
 		progress.AddFile(fileSize)
 		progress.AddFile(50)
-		progress.AddProgress("test1", 50, 50)
-		progress.AddProgress("test2", 50, fileSize)
-		progress.AddProgress("test2", 50, fileSize)
+		progress.AddProgress(node.GenericAttributes, "test1", 50, 50)
+		progress.AddProgress(node.GenericAttributes, "test2", 50, fileSize)
+		progress.AddProgress(node.GenericAttributes, "test2", 50, fileSize)
 		return false
 	})
 	test.Equals(t, printerTrace{
@@ -109,11 +113,12 @@ func TestLastProgressOnLastFile(t *testing.T) {
 func TestSummaryOnSuccess(t *testing.T) {
 	fileSize := uint64(100)
 
+	node := restic.Node{}
 	result := testProgress(func(progress *Progress) bool {
 		progress.AddFile(fileSize)
 		progress.AddFile(50)
-		progress.AddProgress("test1", 50, 50)
-		progress.AddProgress("test2", fileSize, fileSize)
+		progress.AddProgress(node.GenericAttributes, "test1", 50, 50)
+		progress.AddProgress(node.GenericAttributes, "test2", fileSize, fileSize)
 		return true
 	})
 	test.Equals(t, printerTrace{
@@ -124,11 +129,12 @@ func TestSummaryOnSuccess(t *testing.T) {
 func TestSummaryOnErrors(t *testing.T) {
 	fileSize := uint64(100)
 
+	node := restic.Node{}
 	result := testProgress(func(progress *Progress) bool {
 		progress.AddFile(fileSize)
 		progress.AddFile(50)
-		progress.AddProgress("test1", 50, 50)
-		progress.AddProgress("test2", fileSize/2, fileSize)
+		progress.AddProgress(node.GenericAttributes, "test1", 50, 50)
+		progress.AddProgress(node.GenericAttributes, "test2", fileSize/2, fileSize)
 		return true
 	})
 	test.Equals(t, printerTrace{

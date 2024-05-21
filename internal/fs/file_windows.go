@@ -78,6 +78,14 @@ func Chmod(name string, mode os.FileMode) error {
 	return os.Chmod(fixpath(name), mode)
 }
 
+// SanitizeMainFileName will only keep the main file and remove the secondary file like ADS from the name.
+func SanitizeMainFileName(str string) string {
+	// The ADS is essentially a part of the main file. So for any functionality that
+	// needs to consider the main file, like filtering, we need to derive the main file name
+	// from the ADS name.
+	return TrimAds(str)
+}
+
 // ClearSystem removes the system attribute from the file.
 func ClearSystem(path string) error {
 	return ClearAttribute(path, windows.FILE_ATTRIBUTE_SYSTEM)

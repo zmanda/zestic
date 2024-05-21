@@ -39,7 +39,7 @@ func newFilesWriter(count int) *filesWriter {
 	}
 }
 
-func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, createSize int64, sparse bool) error {
+func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, createSize int64, fileInfo *fileInfo) error {
 	bucket := &w.buckets[uint(xxhash.Sum64String(path))%uint(len(w.buckets))]
 
 	acquireWriter := func() (*partialFile, error) {
@@ -50,33 +50,18 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 			bucket.files[path].users++
 			return wr, nil
 		}
-		var f *os.File
-		var err error
-		if createSize >= 0 {
-			f, err = openFileWithCreate(path)
-			if fs.IsAccessDenied(err) {
-				// If file is readonly, clear the readonly flag by resetting the
-				// permissions of the file and try again
-				// as the metadata will be set again in the second pass and the
-				// readonly flag will be applied again if needed.
-				err = fs.ResetPermissions(path)
-				if err != nil {
-					return nil, err
-				}
-				f, err = openFileWithTruncWrite(path)
-			}
-		} else {
-			flags := os.O_WRONLY
-			f, err = os.OpenFile(path, flags, 0600)
-		}
+
+		f, err := w.OpenFile(createSize, path, fileInfo)
 		if err != nil {
 			return nil, err
 		}
-		wr := &partialFile{File: f, users: 1, sparse: sparse}
+
+		wr := &partialFile{File: f, users: 1, sparse: fileInfo.sparse}
 		bucket.files[path] = wr
 
-		if createSize >= 0 {
-			if sparse {
+		if createSize >= 0 && f != nil {
+			// There are cases like ADS files where f can be nil
+			if fileInfo.sparse {
 				err = truncateSparse(f, createSize)
 				if err != nil {
 					return nil, err
@@ -103,6 +88,9 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 
 		if bucket.files[path].users == 1 {
 			delete(bucket.files, path)
+
+			//Clean up for the path
+			CleanupPath(path)
 			return wr.Close()
 		}
 		bucket.files[path].users--
@@ -123,16 +111,4 @@ func (w *filesWriter) writeToFile(path string, blob []byte, offset int64, create
 	}
 
 	return releaseWriter(wr)
-}
-
-// openFileWithCreate opens the file with os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
-func openFileWithCreate(path string) (file *os.File, err error) {
-	flags := os.O_CREATE | os.O_TRUNC | os.O_WRONLY
-	return os.OpenFile(path, flags, 0600)
-}
-
-// openFileWithTruncWrite opens the file without os.O_CREATE flag along with os.O_TRUNC and os.O_WRONLY.
-func openFileWithTruncWrite(path string) (file *os.File, err error) {
-	flags := os.O_TRUNC | os.O_WRONLY
-	return os.OpenFile(path, flags, 0600)
 }

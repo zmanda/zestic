@@ -170,7 +170,7 @@ func (res *Restorer) restoreNodeTo(ctx context.Context, node *restic.Node, targe
 	}
 
 	if res.progress != nil {
-		res.progress.AddProgress(location, 0, 0)
+		res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 	}
 
 	return res.restoreNodeMetadataTo(node, target, location)
@@ -195,7 +195,7 @@ func (res *Restorer) restoreHardlinkAt(node *restic.Node, target, path, location
 	}
 
 	if res.progress != nil {
-		res.progress.AddProgress(location, 0, 0)
+		res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 	}
 
 	// TODO investigate if hardlinks have separate metadata on any supported system
@@ -224,7 +224,7 @@ func (res *Restorer) restoreEmptyFileAt(node *restic.Node, target, location stri
 	}
 
 	if res.progress != nil {
-		res.progress.AddProgress(location, 0, 0)
+		res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 	}
 
 	return res.restoreNodeMetadataTo(node, target, location)
@@ -253,7 +253,7 @@ func (res *Restorer) RestoreTo(ctx context.Context, dst string) error {
 		enterDir: func(node *restic.Node, target, location string) error {
 			debug.Log("first pass, enterDir: mkdir %q, leaveDir should restore metadata", location)
 			if res.progress != nil {
-				res.progress.AddFile(0)
+				res.addFile(node, 0)
 			}
 			// create dir with default permissions
 			// #leaveDir restores dir metadata after visiting all children
@@ -271,14 +271,14 @@ func (res *Restorer) RestoreTo(ctx context.Context, dst string) error {
 
 			if node.Type != "file" {
 				if res.progress != nil {
-					res.progress.AddFile(0)
+					res.addFile(node, 0)
 				}
 				return nil
 			}
 
 			if node.Size == 0 {
 				if res.progress != nil {
-					res.progress.AddFile(node.Size)
+					res.addFile(node, node.Size)
 				}
 				return nil // deal with empty files later
 			}
@@ -287,7 +287,7 @@ func (res *Restorer) RestoreTo(ctx context.Context, dst string) error {
 				if idx.Has(node.Inode, node.DeviceID) {
 					if res.progress != nil {
 						// a hardlinked file does not increase the restore size
-						res.progress.AddFile(0)
+						res.addFile(node, 0)
 					}
 					return nil
 				}
@@ -295,10 +295,10 @@ func (res *Restorer) RestoreTo(ctx context.Context, dst string) error {
 			}
 
 			if res.progress != nil {
-				res.progress.AddFile(node.Size)
+				res.addFile(node, node.Size)
 			}
 
-			filerestorer.addFile(location, node.Content, int64(node.Size))
+			filerestorer.addFile(location, node.Content, node.GenericAttributes, int64(node.Size))
 
 			return nil
 		},
@@ -339,7 +339,7 @@ func (res *Restorer) RestoreTo(ctx context.Context, dst string) error {
 		leaveDir: func(node *restic.Node, target, location string) error {
 			err := res.restoreNodeMetadataTo(node, target, location)
 			if err == nil && res.progress != nil {
-				res.progress.AddProgress(location, 0, 0)
+				res.progress.AddProgress(node.GenericAttributes, location, 0, 0)
 			}
 			return err
 		},
