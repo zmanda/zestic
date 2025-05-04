@@ -636,8 +636,11 @@ func runBackup(ctx context.Context, opts BackupOptions, gopts GlobalOptions, ter
 	arch.WithAtime = opts.WithAtime
 	success := true
 	arch.Error = func(item string, err error) error {
-		success = false
+		if !errors.Is(err, archiver.ErrPartsOfFileNotFound) {
+			success = false
+		}
 		reterr := progressReporter.Error(item, err)
+
 		// If we receive a fatal error during the execution of the snapshot,
 		// we abort the snapshot.
 		if reterr == nil && errors.IsFatal(err) {
